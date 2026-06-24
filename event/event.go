@@ -1,12 +1,16 @@
+﻿// Package event 事件处理注册
 package event
 
 import (
 	"encoding/json"
+	"sync"
+
+	"github.com/tidwall/gjson" // 由于回包的d 类型不确定，gjson 用于从回包json中提可d 并进行针瀵规€х殑瑙ｆ瀽
 
 	"github.com/sealdice/botgo/dto"
-	"github.com/tidwall/gjson" // 由于回包的 d 类型不确定，gjson 用于从回包json中提取 d 并进行针对性的解析
 )
 
+var eventParseFuncMapLock = new(sync.RWMutex)
 var eventParseFuncMap = map[dto.OPCode]map[dto.EventType]eventParseFunc{
 	dto.WSDispatchEvent: {
 		dto.EventGuildCreate: guildHandler,
@@ -50,23 +54,41 @@ var eventParseFuncMap = map[dto.OPCode]map[dto.EventType]eventParseFunc{
 		dto.EventForumReplyDelete:  replyHandler,
 		dto.EventForumAuditResult:  forumAuditHandler,
 
-		dto.EventInteractionCreate: interactionHandler,
-
-		dto.EventC2CMessageCreate: c2cMessageHandler,
-
+		dto.EventInteractionCreate:    interactionHandler,
 		dto.EventGroupAtMessageCreate: groupAtMessageHandler,
+		dto.EventC2CMessageCreate:     c2cMessageHandler,
+		dto.EventSubscribeMsgStatus:   subscribeStatusHandler,
+		dto.EventC2CFriendAdd:         c2cFriendAddHandler,
+		dto.EventC2CFriendDel:         c2cFriendDelHandler,
+		dto.EventEnterAIO:             enterAIOHandler,
 	},
+}
+
+// RegisterHandler 注册回调事件处理鍣?func RegisterHandler(opCode dto.OPCode, eventType dto.EventType, handler eventParseFunc) {
+	eventParseFuncMapLock.Lock()
+	defer eventParseFuncMapLock.Unlock()
+	if eventParseFuncMap[opCode] == nil {
+		eventParseFuncMap[opCode] = make(map[dto.EventType]eventParseFunc)
+	}
+	eventParseFuncMap[opCode][eventType] = handler
+}
+
+func getHandler(opCode dto.OPCode, eventType dto.EventType) (eventParseFunc, bool) {
+	eventParseFuncMapLock.RLock()
+	defer eventParseFuncMapLock.RUnlock()
+	f, ok := eventParseFuncMap[opCode][eventType]
+	return f, ok
 }
 
 type eventParseFunc func(event *dto.WSPayload, message []byte) error
 
 // ParseAndHandle 处理回调事件
 func ParseAndHandle(payload *dto.WSPayload) error {
-	// 指定类型的 handler
-	if h, ok := eventParseFuncMap[payload.OPCode][payload.Type]; ok {
+	// 指定类型的handler
+	if h, ok := getHandler(payload.OPCode, payload.Type); ok {
 		return h(payload, payload.RawMessage)
 	}
-	// 透传handler，如果未注册具体类型的 handler，会统一投递到这个 handler
+	// 透传handler，如果未注册具体类型的handler，会统一鎶曢€掑埌杩欎釜 handler
 	if DefaultHandlers.Plain != nil {
 		return DefaultHandlers.Plain(payload, payload.RawMessage)
 	}
@@ -152,6 +174,61 @@ func atMessageHandler(payload *dto.WSPayload, message []byte) error {
 	}
 	if DefaultHandlers.ATMessage != nil {
 		return DefaultHandlers.ATMessage(payload, data)
+	}
+	return nil
+}
+
+func groupAtMessageHandler(payload *dto.WSPayload, message []byte) error {
+	data := &dto.WSGroupATMessageData{}
+	if err := ParseData(message, data); err != nil {
+		return err
+	}
+	if DefaultHandlers.GroupATMessage != nil {
+		return DefaultHandlers.GroupATMessage(payload, data)
+	}
+	return nil
+}
+
+func c2cMessageHandler(payload *dto.WSPayload, message []byte) error {
+	data := &dto.WSC2CMessageData{}
+	if err := ParseData(message, data); err != nil {
+		return err
+	}
+	if DefaultHandlers.C2CMessage != nil {
+		return DefaultHandlers.C2CMessage(payload, data)
+	}
+	return nil
+}
+
+func subscribeStatusHandler(payload *dto.WSPayload, message []byte) error {
+	data := &dto.WSSubscribeMsgStatus{}
+	if err := ParseData(message, data); err != nil {
+		return err
+	}
+	if DefaultHandlers.SubscribeMsgStatus != nil {
+		return DefaultHandlers.SubscribeMsgStatus(payload, data)
+	}
+	return nil
+}
+
+func c2cFriendDelHandler(payload *dto.WSPayload, message []byte) error {
+	data := &dto.WSC2CFriendData{}
+	if err := ParseData(message, data); err != nil {
+		return err
+	}
+	if DefaultHandlers.C2CFriend != nil {
+		return DefaultHandlers.C2CFriend(payload, data)
+	}
+	return nil
+}
+
+func c2cFriendAddHandler(payload *dto.WSPayload, message []byte) error {
+	data := &dto.WSC2CFriendData{}
+	if err := ParseData(message, data); err != nil {
+		return err
+	}
+	if DefaultHandlers.C2CFriend != nil {
+		return DefaultHandlers.C2CFriend(payload, data)
 	}
 	return nil
 }
@@ -266,24 +343,13 @@ func interactionHandler(payload *dto.WSPayload, message []byte) error {
 	return nil
 }
 
-func c2cMessageHandler(payload *dto.WSPayload, message []byte) error {
-	data := &dto.WSC2CMessageData{}
+func enterAIOHandler(payload *dto.WSPayload, message []byte) error {
+	data := &dto.WSEnterAIOData{}
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.C2CMessage != nil {
-		return DefaultHandlers.C2CMessage(payload, data)
-	}
-	return nil
-}
-
-func groupAtMessageHandler(payload *dto.WSPayload, message []byte) error {
-	data := &dto.WSGroupATMessageData{}
-	if err := ParseData(message, data); err != nil {
-		return err
-	}
-	if DefaultHandlers.GroupATMessage != nil {
-		return DefaultHandlers.GroupATMessage(payload, data)
+	if DefaultHandlers.EnterAIO != nil {
+		return DefaultHandlers.EnterAIO(payload, data)
 	}
 	return nil
 }

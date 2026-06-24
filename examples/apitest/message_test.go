@@ -1,4 +1,4 @@
-package apitest
+﻿package apitest
 
 import (
 	"fmt"
@@ -7,14 +7,12 @@ import (
 	"github.com/sealdice/botgo/dto/keyboard"
 
 	"github.com/sealdice/botgo/dto"
-	"github.com/sealdice/botgo/openapi"
 )
 
 func TestMessage(t *testing.T) {
 	t.Run(
 		"message list", func(t *testing.T) {
-			// 先拉取3条消息
-			messages, err := api.Messages(
+			// 先拉可条消息			messages, err := api.Messages(
 				ctx, testChannelID, &dto.MessagesPager{
 					Limit: "3",
 				},
@@ -28,8 +26,7 @@ func TestMessage(t *testing.T) {
 				t.Log(message.ID, message.Author.Username, message.Timestamp)
 			}
 
-			// 从上面3条的第二条往前拉取
-			messages, err = api.Messages(
+			// 从上闈?条的第二条往前拉可			messages, err = api.Messages(
 				ctx, testChannelID, &dto.MessagesPager{
 					Type:  dto.MPTBefore,
 					ID:    index[1],
@@ -46,8 +43,7 @@ func TestMessage(t *testing.T) {
 				t.Log(message.ID, message.Author.Username, message.Timestamp)
 			}
 
-			// 从上面3条的第二条往后拉取
-			messages, err = api.Messages(
+			// 从上闈?条的第二条往后拉可			messages, err = api.Messages(
 				ctx, testChannelID, &dto.MessagesPager{
 					Type:  dto.MPTAfter,
 					ID:    index[1],
@@ -63,8 +59,7 @@ func TestMessage(t *testing.T) {
 				}
 				t.Log(message.ID, message.Author.Username, message.Timestamp)
 			}
-			// 从上面3条的第二条环绕拉取
-			messages, err = api.Messages(
+			// 从上闈?条的第二条环绕拉可			messages, err = api.Messages(
 				ctx, testChannelID, &dto.MessagesPager{
 					Type:  dto.MPTAround,
 					ID:    index[1],
@@ -94,7 +89,7 @@ func TestRetractMessage(t *testing.T) {
 	msgID := "109b8a401a1231343431313532313831383136323933383420801e28003081b0f30338cd6040c36048f5e4908e0650b1acf8fa05"
 	t.Run(
 		"消息撤回", func(t *testing.T) {
-			err := api.RetractMessage(ctx, "1049883", msgID, openapi.RetractMessageOptionHidetip)
+			err := api.RetractMessage(ctx, "1049883", msgID)
 			if err != nil {
 				t.Error(err)
 			}
@@ -145,11 +140,11 @@ func TestMarkdownMessage(t *testing.T) {
 							},
 							{
 								Key:    "link",
-								Values: []string{"[🔗我的收藏夹](qq.com)"},
+								Values: []string{"[馃敆鎴戠殑鏀惰棌澶筣(qq.com)"},
 							},
 							{
 								Key:    "desc",
-								Values: []string{"简介"},
+								Values: []string{"绠€件},
 							},
 						},
 					},
@@ -169,7 +164,7 @@ func TestKeyboardMessage(t *testing.T) {
 			message, err := api.PostMessage(
 				ctx, testChannelID, &dto.MessageToCreate{
 					Markdown: &dto.Markdown{
-						Content: "# 123 \n 今天是个好天气",
+						Content: "# 123 \n 今天是个好天姘?,
 					},
 					Keyboard: &keyboard.MessageKeyboard{
 						Content: &keyboard.CustomKeyboard{

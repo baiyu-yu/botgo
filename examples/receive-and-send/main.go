@@ -1,11 +1,11 @@
-package main
+﻿package main
 
 import (
 	"context"
 	"fmt"
 	"log"
-	"path"
-	"runtime"
+	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -13,122 +13,62 @@ import (
 	"github.com/sealdice/botgo/dto"
 	"github.com/sealdice/botgo/dto/message"
 	"github.com/sealdice/botgo/event"
+	"github.com/sealdice/botgo/interaction/webhook"
 	"github.com/sealdice/botgo/token"
-	"github.com/sealdice/botgo/websocket"
+	"gopkg.in/yaml.v3"
+)
+
+const (
+	host_ = "0.0.0.0"
+	port_ = 9000
+	path_ = "/qqbot"
 )
 
 // 消息处理器，持有 openapi 对象
 var processor Processor
 
 func main() {
-	ctx := context.Background()
-	// 加载 appid 和 token
-	botToken := token.New(token.TypeBot)
-	if err := botToken.LoadFromConfig(getConfigPath("config.yaml")); err != nil {
-		log.Fatalln(err)
-	}
-
-	// 初始化 openapi，正式环境
-	api := botgo.NewOpenAPI(botToken).WithTimeout(3 * time.Second)
-	// 沙箱环境
-	// api := botgo.NewSandboxOpenAPI(botToken).WithTimeout(3 * time.Second)
-
-	// 获取 websocket 信息
-	wsInfo, err := api.WS(ctx, nil, "")
+	// 加载 appid 和token
+	content, err := os.ReadFile("config.yaml")
 	if err != nil {
+		log.Fatalln("load config file failed, err:", err)
+	}
+	credentials := &token.QQBotCredentials{
+		AppID:     "",
+		AppSecret: "",
+	}
+	if err = yaml.Unmarshal(content, &credentials); err != nil {
+		log.Fatalln("parse config failed, err:", err)
+	}
+	log.Println("credentials:", credentials)
+	tokenSource := token.NewQQBotTokenSource(credentials)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel() //释放刷新协程
+	if err = token.StartRefreshAccessToken(ctx, tokenSource); err != nil {
 		log.Fatalln(err)
 	}
-
+	// 初始鍖?openapi，正式环澧?	api := botgo.NewOpenAPI(credentials.AppID, tokenSource).WithTimeout(5 * time.Second).SetDebug(true)
 	processor = Processor{api: api}
-
-	// websocket.RegisterResumeSignal(syscall.SIGUSR1)
-	// 根据不同的回调，生成 intents
-	intent := websocket.RegisterHandlers(
-		// at 机器人事件，目前是在这个事件处理中有逻辑，会回消息，其他的回调处理都只把数据打印出来，不做任何处理
-		ATMessageEventHandler(),
-		// 如果想要捕获到连接成功的事件，可以实现这个回调
-		ReadyHandler(),
-		// 连接关闭回调
-		ErrorNotifyHandler(),
-		// 频道事件
-		GuildEventHandler(),
-		// 成员事件
-		MemberEventHandler(),
-		// 子频道事件
-		ChannelEventHandler(),
-		// 私信，目前只有私域才能够收到这个，如果你的机器人不是私域机器人，会导致连接报错，那么启动 example 就需要注释掉这个回调
-		DirectMessageHandler(),
-		// 频道消息，只有私域才能够收到这个，如果你的机器人不是私域机器人，会导致连接报错，那么启动 example 就需要注释掉这个回调
-		CreateMessageHandler(),
-		// 互动事件
-		InteractionHandler(),
-		// 发帖事件
-		ThreadEventHandler(),
+	// 注册处理函数
+	_ = event.RegisterHandlers(
+		// ***********消息事件***********
+		// 群@机器人消息事件		GroupATMessageEventHandler(),
+		// C2C消息事件
+		C2CMessageEventHandler(),
+		// 频道@机器人事件		ChannelATMessageEventHandler(),
 	)
-	// 指定需要启动的分片数为 2 的话可以手动修改 wsInfo
-	if err = botgo.NewSessionManager().Start(wsInfo, botToken, &intent); err != nil {
-		log.Fatalln(err)
+	http.HandleFunc(path_, func(writer http.ResponseWriter, request *http.Request) {
+		webhook.HTTPHandler(writer, request, credentials)
+	})
+	if err = http.ListenAndServe(fmt.Sprintf("%s:%d", host_, port_), nil); err != nil {
+		log.Fatal("setup server fatal:", err)
 	}
 }
 
-// ReadyHandler 自定义 ReadyHandler 感知连接成功事件
-func ReadyHandler() event.ReadyHandler {
-	return func(event *dto.WSPayload, data *dto.WSReadyData) {
-		log.Println("ready event receive: ", data)
-	}
-}
-
-func ErrorNotifyHandler() event.ErrorNotifyHandler {
-	return func(err error) {
-		log.Println("error notify receive: ", err)
-	}
-}
-
-// ATMessageEventHandler 实现处理 at 消息的回调
-func ATMessageEventHandler() event.ATMessageEventHandler {
+// ChannelATMessageEventHandler 实现处理 at 消息的回璋?func ChannelATMessageEventHandler() event.ATMessageEventHandler {
 	return func(event *dto.WSPayload, data *dto.WSATMessageData) error {
 		input := strings.ToLower(message.ETLInput(data.Content))
-		return processor.ProcessMessage(input, data)
-	}
-}
-
-// GuildEventHandler 处理频道事件
-func GuildEventHandler() event.GuildEventHandler {
-	return func(event *dto.WSPayload, data *dto.WSGuildData) error {
-		fmt.Println(data)
-		return nil
-	}
-}
-
-// ChannelEventHandler 处理子频道事件
-func ChannelEventHandler() event.ChannelEventHandler {
-	return func(event *dto.WSPayload, data *dto.WSChannelData) error {
-		fmt.Println(data)
-		return nil
-	}
-}
-
-// MemberEventHandler 处理成员变更事件
-func MemberEventHandler() event.GuildMemberEventHandler {
-	return func(event *dto.WSPayload, data *dto.WSGuildMemberData) error {
-		fmt.Println(data)
-		return nil
-	}
-}
-
-// DirectMessageHandler 处理私信事件
-func DirectMessageHandler() event.DirectMessageEventHandler {
-	return func(event *dto.WSPayload, data *dto.WSDirectMessageData) error {
-		fmt.Println(data)
-		return nil
-	}
-}
-
-// CreateMessageHandler 处理消息事件
-func CreateMessageHandler() event.MessageEventHandler {
-	return func(event *dto.WSPayload, data *dto.WSMessageData) error {
-		fmt.Println(data)
-		return nil
+		return processor.ProcessChannelMessage(input, data)
 	}
 }
 
@@ -140,25 +80,61 @@ func InteractionHandler() event.InteractionEventHandler {
 	}
 }
 
-// C2CMessageHandler 处理单聊消息事件
-func C2CMessageHandler() event.C2CMessageEventHandler {
-	return func(event *dto.WSPayload, data *dto.WSC2CMessageData) error {
-		fmt.Println(data)
-		return nil
-	}
-}
-
-func GroupATMessageHandler() event.GroupATMessageEventHandler {
+// GroupATMessageEventHandler 实现处理 at 消息的回璋?func GroupATMessageEventHandler() event.GroupATMessageEventHandler {
 	return func(event *dto.WSPayload, data *dto.WSGroupATMessageData) error {
+		input := strings.ToLower(message.ETLInput(data.Content))
+		return processor.ProcessGroupMessage(input, data)
+	}
+}
+
+// C2CMessageEventHandler 实现处理 at 消息的回璋?func C2CMessageEventHandler() event.C2CMessageEventHandler {
+	return func(event *dto.WSPayload, data *dto.WSC2CMessageData) error {
+		return processor.ProcessC2CMessage(string(event.RawMessage), data)
+	}
+}
+
+// C2CFriendEventHandler 实现处理好友关系变更的回璋?func C2CFriendEventHandler() event.C2CFriendEventHandler {
+	return func(event *dto.WSPayload, data *dto.WSC2CFriendData) error {
+		fmt.Println(data)
+		return processor.ProcessFriend(string(event.Type), data)
+	}
+}
+
+// GuildEventHandler 处理频道事件
+func GuildEventHandler() event.GuildEventHandler {
+	return func(event *dto.WSPayload, data *dto.WSGuildData) error {
 		fmt.Println(data)
 		return nil
 	}
 }
 
-func getConfigPath(name string) string {
-	_, filename, _, ok := runtime.Caller(1)
-	if ok {
-		return fmt.Sprintf("%s/%s", path.Dir(filename), name)
+// ChannelEventHandler 处理子频道事件func ChannelEventHandler() event.ChannelEventHandler {
+	return func(event *dto.WSPayload, data *dto.WSChannelData) error {
+		fmt.Println(data)
+		return nil
 	}
-	return ""
+}
+
+// GuildMemberEventHandler 处理成员变更事件
+func GuildMemberEventHandler() event.GuildMemberEventHandler {
+	return func(event *dto.WSPayload, data *dto.WSGuildMemberData) error {
+		fmt.Println(data)
+		return nil
+	}
+}
+
+// GuildDirectMessageHandler 处理频道私信事件
+func GuildDirectMessageHandler() event.DirectMessageEventHandler {
+	return func(event *dto.WSPayload, data *dto.WSDirectMessageData) error {
+		fmt.Println(data)
+		return nil
+	}
+}
+
+// GuildMessageHandler 处理消息事件
+func GuildMessageHandler() event.MessageEventHandler {
+	return func(event *dto.WSPayload, data *dto.WSMessageData) error {
+		fmt.Println(data)
+		return nil
+	}
 }

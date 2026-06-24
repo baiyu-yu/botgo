@@ -1,4 +1,4 @@
-package dto
+﻿package dto
 
 func init() {
 	eventIntentMap = transposeIntentEventMap(intentEventMap)
@@ -38,19 +38,24 @@ const (
 	EventForumReplyDelete      EventType = "FORUM_REPLY_DELETE"
 	EventForumAuditResult      EventType = "FORUM_PUBLISH_AUDIT_RESULT"
 	EventInteractionCreate     EventType = "INTERACTION_CREATE"
-
-	EventC2CMessageCreate     EventType = "C2C_MESSAGE_CREATE"
-	EventGroupAtMessageCreate EventType = "GROUP_AT_MESSAGE_CREATE"
+	EventGroupAtMessageCreate  EventType = "GROUP_AT_MESSAGE_CREATE"
+	EventC2CMessageCreate      EventType = "C2C_MESSAGE_CREATE"
+	EventSubscribeMsgStatus    EventType = "SUBSCRIBE_MESSAGE_STATUS"
+	EventC2CFriendAdd          EventType = "FRIEND_ADD"
+	EventC2CFriendDel          EventType = "FRIEND_DEL"
+	EventEnterAIO              EventType = "ENTER_AIO"
 )
 
-// intentEventMap 不同 intent 对应的事件定义
-var intentEventMap = map[Intent][]EventType{
+// intentEventMap 不同 intent 对应的事件定涔?var intentEventMap = map[Intent][]EventType{
 	IntentGuilds: {
 		EventGuildCreate, EventGuildUpdate, EventGuildDelete,
 		EventChannelCreate, EventChannelUpdate, EventChannelDelete,
 	},
-	IntentGuildMembers:          {EventGuildMemberAdd, EventGuildMemberUpdate, EventGuildMemberRemove},
-	IntentGuildMessages:         {EventMessageCreate, EventMessageDelete},
+	IntentGuildMembers:  {EventGuildMemberAdd, EventGuildMemberUpdate, EventGuildMemberRemove},
+	IntentGuildMessages: {EventMessageCreate, EventMessageDelete},
+	IntentGroupMessages: {EventGroupAtMessageCreate, EventC2CMessageCreate, EventSubscribeMsgStatus,
+		EventC2CFriendAdd, EventC2CFriendDel},
+
 	IntentGuildMessageReactions: {EventMessageReactionAdd, EventMessageReactionRemove},
 	IntentGuildAtMessage:        {EventAtMessageCreate, EventPublicMessageDelete},
 	IntentDirectMessages:        {EventDirectMessageCreate, EventDirectMessageDelete},
@@ -60,13 +65,13 @@ var intentEventMap = map[Intent][]EventType{
 		EventForumThreadCreate, EventForumThreadUpdate, EventForumThreadDelete, EventForumPostCreate,
 		EventForumPostDelete, EventForumReplyCreate, EventForumReplyDelete, EventForumAuditResult,
 	},
-	IntentInteraction:         {EventInteractionCreate},
-	IntentC2CAndGroupMessages: {EventC2CMessageCreate, EventGroupAtMessageCreate},
+	IntentInteraction: {EventInteractionCreate},
+	IntentEnterAIO:    {EventEnterAIO},
 }
 
 var eventIntentMap = transposeIntentEventMap(intentEventMap)
 
-// transposeIntentEventMap 转置 intent 与 event 的关系，用于根据 event 找到 intent
+// transposeIntentEventMap 转置 intent 为event 的关系，用于根据 event 找到 intent
 func transposeIntentEventMap(input map[Intent][]EventType) map[EventType]Intent {
 	result := make(map[EventType]Intent)
 	for i, eventTypes := range input {

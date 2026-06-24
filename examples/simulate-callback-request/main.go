@@ -1,40 +1,49 @@
-package main
+﻿package main
 
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
 	"github.com/sealdice/botgo/dto"
-	"github.com/sealdice/botgo/event"
 	"github.com/sealdice/botgo/interaction/signature"
-	"github.com/sealdice/botgo/interaction/webhook"
+	"github.com/sealdice/botgo/token"
+	"gopkg.in/yaml.v3"
 )
 
-var handler event.PlainEventHandler = func(payload *dto.WSPayload, message []byte) error {
-	fmt.Println(payload, message)
-	return nil
-}
-
 const host = "http://localhost"
-const port = ":8081"
-const path = "/bot"
+const port = ":9000"
+const path = "/qqbot"
 const url = host + port + path
 
 func main() {
-	event.RegisterHandlers(handler)
-	http.HandleFunc(path, webhook.HTTPHandler)
-	go simulateRequest()
-	if err := http.ListenAndServe(port, nil); err != nil {
-		panic(err)
+	// 加载 appid 和token
+	content, err := os.ReadFile("config.yaml")
+	if err != nil {
+		log.Fatalln("load config file failed, err:", err)
 	}
+	credentials := &token.QQBotCredentials{}
+	if err = yaml.Unmarshal(content, credentials); err != nil {
+		log.Fatalln("parse config failed, err:", err)
+	}
+	log.Println("credentials:", credentials)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	go simulateRequest(credentials)
+	var ln string
+	fmt.Scanln()
+	_, _ = fmt.Sscanln("%v", ln)
+	fmt.Println("end")
 }
 
-func simulateRequest() {
+func simulateRequest(credentials *token.QQBotCredentials) {
 	// 等待 http 服务启动
 	time.Sleep(3 * time.Second)
 	var heartbeat = &dto.WSPayload{
@@ -44,7 +53,7 @@ func simulateRequest() {
 		Data: 123,
 	}
 	payload, _ := json.Marshal(heartbeat)
-	send(payload)
+	send(payload, credentials)
 
 	var dispatchEvent = &dto.WSPayload{
 		WSPayloadBase: dto.WSPayloadBase{
@@ -69,14 +78,14 @@ func simulateRequest() {
 	}
 	payload, _ = json.Marshal(dispatchEvent)
 	fmt.Println(string(payload))
-	send(payload)
+	send(payload, credentials)
 }
 
-func send(payload []byte) {
+func send(payload []byte, credentials *token.QQBotCredentials) {
 	header := http.Header{}
 	header.Set(signature.HeaderTimestamp, strconv.FormatUint(uint64(time.Now().Unix()), 10))
 
-	sig, err := signature.Generate(webhook.DefaultGetSecretFunc(), header, payload)
+	sig, err := signature.Generate(credentials.AppSecret, header, payload)
 	if err != nil {
 		fmt.Println(err)
 		return

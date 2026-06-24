@@ -1,24 +1,23 @@
-package apitest
+﻿package apitest
 
 import (
 	"context"
-	"io/ioutil"
 	"log"
 	"os"
 	"testing"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/sealdice/botgo"
 	"github.com/sealdice/botgo/openapi"
 	"github.com/sealdice/botgo/token"
-	"gopkg.in/yaml.v2"
 )
 
 var conf struct {
-	AppID uint64 `yaml:"appid"`
-	Token string `yaml:"token"`
+	AppID  uint64 `yaml:"appid"`
+	Secret string `yaml:"secret"`
 }
-var botToken *token.Token
 var api openapi.OpenAPI
 
 var (
@@ -35,19 +34,19 @@ var (
 
 func TestMain(m *testing.M) {
 	ctx = context.Background()
-	content, err := ioutil.ReadFile("./config.yaml")
+	content, err := os.ReadFile("./config.yaml")
 	if err != nil {
 		log.Println("read conf failed")
 		os.Exit(1)
 	}
-	if err := yaml.Unmarshal(content, &conf); err != nil {
+	credentials := &token.QQBotCredentials{}
+	if err := yaml.Unmarshal(content, credentials); err != nil {
 		log.Println(err)
 		os.Exit(1)
 	}
-	log.Println(conf)
-
-	botToken = token.BotToken(conf.AppID, conf.Token)
-	api = botgo.NewOpenAPI(botToken).WithTimeout(3 * time.Second)
-
+	log.Println(credentials)
+	appid := credentials.AppID
+	tokenSource := token.NewQQBotTokenSource(credentials)
+	api = botgo.NewOpenAPI(appid, tokenSource).WithTimeout(3 * time.Second)
 	os.Exit(m.Run())
 }

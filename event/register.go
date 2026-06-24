@@ -1,10 +1,10 @@
-package event
+﻿package event
 
 import (
 	"github.com/sealdice/botgo/dto"
 )
 
-// DefaultHandlers 默认的 handler 结构，管理所有支持的 handler 类型
+// DefaultHandlers 默认的handler 结构，管理所有支持的 handler 类型
 var DefaultHandlers struct {
 	Ready       ReadyHandler
 	ErrorNotify ErrorNotifyHandler
@@ -32,16 +32,18 @@ var DefaultHandlers struct {
 
 	Interaction InteractionEventHandler
 
-	C2CMessage C2CMessageEventHandler
+	GroupATMessage     GroupATMessageEventHandler
+	C2CMessage         C2CMessageEventHandler
+	SubscribeMsgStatus SubscribeMsgStatusEventHandler
+	C2CFriend          C2CFriendEventHandler
 
-	GroupATMessage GroupATMessageEventHandler
+	EnterAIO EnterAIOEventHandler
 }
 
-// ReadyHandler 可以处理 ws 的 ready 事件
+// ReadyHandler 可以处理 ws 的ready 事件
 type ReadyHandler func(event *dto.WSPayload, data *dto.WSReadyData)
 
-// ErrorNotifyHandler 当 ws 连接发生错误的时候，会回调，方便使用方监控相关错误
-// 比如 reconnect invalidSession 等错误，错误可以转换为 bot.Err
+// ErrorNotifyHandler 当ws 连接发生错误的时候，会回调，方便使用方监控相关错误// 比如 reconnect invalidSession 等错误，错误可以转换为bot.Err
 type ErrorNotifyHandler func(err error)
 
 // PlainEventHandler 透传handler
@@ -53,7 +55,7 @@ type GuildEventHandler func(event *dto.WSPayload, data *dto.WSGuildData) error
 // GuildMemberEventHandler 频道成员事件 handler
 type GuildMemberEventHandler func(event *dto.WSPayload, data *dto.WSGuildMemberData) error
 
-// ChannelEventHandler 子频道事件 handler
+// ChannelEventHandler 子频道事件handler
 type ChannelEventHandler func(event *dto.WSPayload, data *dto.WSChannelData) error
 
 // MessageEventHandler 消息事件 handler
@@ -68,16 +70,16 @@ type PublicMessageDeleteEventHandler func(event *dto.WSPayload, data *dto.WSPubl
 // DirectMessageDeleteEventHandler 消息事件 handler
 type DirectMessageDeleteEventHandler func(event *dto.WSPayload, data *dto.WSDirectMessageDeleteData) error
 
-// MessageReactionEventHandler 表情表态事件 handler
+// MessageReactionEventHandler 表情表态事件handler
 type MessageReactionEventHandler func(event *dto.WSPayload, data *dto.WSMessageReactionData) error
 
-// ATMessageEventHandler at 机器人消息事件 handler
+// ATMessageEventHandler at 机器人消息事件handler
 type ATMessageEventHandler func(event *dto.WSPayload, data *dto.WSATMessageData) error
 
 // DirectMessageEventHandler 私信消息事件 handler
 type DirectMessageEventHandler func(event *dto.WSPayload, data *dto.WSDirectMessageData) error
 
-// AudioEventHandler 音频机器人事件 handler
+// AudioEventHandler 音频机器人事件handler
 type AudioEventHandler func(event *dto.WSPayload, data *dto.WSAudioData) error
 
 // MessageAuditEventHandler 消息审核事件 handler
@@ -98,14 +100,28 @@ type ForumAuditEventHandler func(event *dto.WSPayload, data *dto.WSForumAuditDat
 // InteractionEventHandler 互动事件 handler
 type InteractionEventHandler func(event *dto.WSPayload, data *dto.WSInteractionData) error
 
-// C2CMessageEventHandler 单聊消息事件 handler
-type C2CMessageEventHandler func(event *dto.WSPayload, data *dto.WSC2CMessageData) error
+// ***************** 群消息C2C消息  *****************
 
-// GroupATMessageEventHandler 群聊at消息事件 handler
+// GroupATMessageEventHandler 群中at机器人消息事件handler
 type GroupATMessageEventHandler func(event *dto.WSPayload, data *dto.WSGroupATMessageData) error
 
-// RegisterHandlers 注册事件回调，并返回 intent 用于 websocket 的鉴权
-func RegisterHandlers(handlers ...interface{}) dto.Intent {
+// C2CMessageEventHandler 机器人消息事件handler
+type C2CMessageEventHandler func(event *dto.WSPayload, data *dto.WSC2CMessageData) error
+
+// ***************** C2C 添加/删除好友 *******************************
+
+// C2CFriendEventHandler C2C 好友事件 handler
+type C2CFriendEventHandler func(event *dto.WSPayload, data *dto.WSC2CFriendData) error
+
+// ************************************************
+
+// SubscribeMsgStatusEventHandler 订阅消息模板授权状态变更事件handler
+type SubscribeMsgStatusEventHandler func(event *dto.WSPayload, data *dto.WSSubscribeMsgStatus) error
+
+// EnterAIOEventHandler 进入AIO事件 handler
+type EnterAIOEventHandler func(event *dto.WSPayload, data *dto.WSEnterAIOData) error
+
+// RegisterHandlers 注册事件回调，并返回 intent 用于 websocket 的鉴鏉?func RegisterHandlers(handlers ...interface{}) dto.Intent {
 	var i dto.Intent
 	for _, h := range handlers {
 		switch handle := h.(type) {
@@ -124,6 +140,15 @@ func RegisterHandlers(handlers ...interface{}) dto.Intent {
 		case InteractionEventHandler:
 			DefaultHandlers.Interaction = handle
 			i = i | dto.EventToIntent(dto.EventInteractionCreate)
+		case SubscribeMsgStatusEventHandler:
+			DefaultHandlers.SubscribeMsgStatus = handle
+			i = i | dto.EventToIntent(dto.EventSubscribeMsgStatus)
+		case C2CFriendEventHandler:
+			DefaultHandlers.C2CFriend = handle
+			i = i | dto.EventToIntent(dto.EventC2CFriendAdd)
+		case EnterAIOEventHandler:
+			DefaultHandlers.EnterAIO = handle
+			i = i | dto.EventToIntent(dto.EventEnterAIO)
 		default:
 		}
 	}
@@ -176,7 +201,7 @@ func registerRelationHandlers(i dto.Intent, handlers ...interface{}) dto.Intent 
 	return i
 }
 
-// registerMessageHandlers 注册消息相关的 handler
+// registerMessageHandlers 注册消息相关的handler
 func registerMessageHandlers(i dto.Intent, handlers ...interface{}) dto.Intent {
 	for _, h := range handlers {
 		switch handle := h.(type) {
@@ -204,12 +229,12 @@ func registerMessageHandlers(i dto.Intent, handlers ...interface{}) dto.Intent {
 		case MessageAuditEventHandler:
 			DefaultHandlers.MessageAudit = handle
 			i = i | dto.EventToIntent(dto.EventMessageAuditPass, dto.EventMessageAuditReject)
-		case C2CMessageEventHandler:
-			DefaultHandlers.C2CMessage = handle
-			i = i | dto.EventToIntent(dto.EventC2CMessageCreate)
 		case GroupATMessageEventHandler:
 			DefaultHandlers.GroupATMessage = handle
 			i = i | dto.EventToIntent(dto.EventGroupAtMessageCreate)
+		case C2CMessageEventHandler:
+			DefaultHandlers.C2CMessage = handle
+			i = i | dto.EventToIntent(dto.EventC2CMessageCreate)
 		default:
 		}
 	}
