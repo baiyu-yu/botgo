@@ -1,4 +1,4 @@
-﻿package dto
+package dto
 
 // EventType 事件类型
 type EventType string
@@ -7,7 +7,7 @@ type EventType string
 type WSPayload struct {
 	WSPayloadBase
 	Data       interface{} `json:"d,omitempty"`
-	RawMessage []byte      `json:"-"` // 原始的message 数据
+	RawMessage []byte      `json:"-"` // 原始的 message 数据
 	Session    *Session
 }
 
@@ -19,7 +19,7 @@ type WSPayloadBase struct {
 	EventID string    `json:"id,omitempty"`
 }
 
-// 以下为发送到 websocket 的data
+// 以下为发送到 websocket 的 data
 
 // WSIdentityData 鉴权数据
 type WSIdentityData struct {
@@ -65,7 +65,7 @@ type WSGuildData Guild
 // WSGuildMemberData 频道成员 payload
 type WSGuildMemberData Member
 
-// WSChannelData 子频閬?payload
+// WSChannelData 子频道 payload
 type WSChannelData Channel
 
 // WSMessageData 消息 payload
@@ -86,9 +86,11 @@ type WSPublicMessageDeleteData MessageDelete
 // WSDirectMessageDeleteData 私信消息 payload
 type WSDirectMessageDeleteData MessageDelete
 
-// WSAudioData 音频机器人的音频流事件type WSAudioData AudioAction
+// WSAudioData 音频机器人的音频流事件
+type WSAudioData AudioAction
 
-// WSMessageReactionData 表情表态事件type WSMessageReactionData MessageReaction
+// WSMessageReactionData 表情表态事件
+type WSMessageReactionData MessageReaction
 
 // WSMessageAuditData 消息审核事件
 type WSMessageAuditData MessageAudit
@@ -108,10 +110,13 @@ type WSForumAuditData ForumAuditResult
 // WSInteractionData 互动事件
 type WSInteractionData Interaction
 
-// ***************** 群消息C2C消息  *****************
+// ***************** 群消息 C2C消息  *****************
 
 // WSGroupATMessageData 群@机器人的事件
 type WSGroupATMessageData Message
+
+// WSGroupMessageData 群消息事件 (非@)
+type WSGroupMessageData Message
 
 // WSC2CMessageData  c2c消息事件
 type WSC2CMessageData Message
@@ -123,7 +128,8 @@ type WSC2CFriendData C2CFriendData
 
 // ************************************************
 
-// WSSubscribeMsgStatus 订阅消息模板授权状态变更事件type WSSubscribeMsgStatus SubscribeMessageStatusData
+// WSSubscribeMsgStatus 订阅消息模板授权状态变更事件
+type WSSubscribeMsgStatus SubscribeMessageStatusData
 
 // WSEnterAIOData 进入aio事件
 type WSEnterAIOData EnterAIO

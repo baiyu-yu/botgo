@@ -1,4 +1,5 @@
-﻿// Package remote 基于 redis list 实现的分布式 session manager銆?package remote
+// Package remote 基于 redis list 实现的分布式 session manager。
+package remote
 
 import (
 	"context"
@@ -18,14 +19,17 @@ import (
 )
 
 const (
-	// 分布式锁的默认key，可以从外部通过 option 来指瀹?	defaultClusterKey = "defaultCluster"
-	// session 队列的key后缀，实际上的key为`fmt.Sprintf("%s_%s", r.clusterKey, sessionQueueSuffix)`
+	// defaultClusterKey 分布式锁 the 默认key，可以从外部通过 option 来指定
+	defaultClusterKey = "defaultCluster"
+	// sessionQueueSuffix session 队列的key后缀，实际上key为 `fmt.Sprintf("%s_%s", r.clusterKey, sessionQueueSuffix)`
 	sessionQueueSuffix = "sessionsQueue"
-	// 分发shard的实例的分布式锁的默认过期时闂?	distributeLockExpireTime = 60 * time.Second
-	// 每个不同的shard实例的分布式锁，用于避免同个 shard 被启动多个实渚?	shardLockExpireTime = 30 * time.Second
+	// distributeLockExpireTime 分发shard的实例的分布式锁的默认过期时间
+	distributeLockExpireTime = 60 * time.Second
+	// shardLockExpireTime 每个不同的shard实例的分布式锁，用于避免同一个 shard 被启动多个实例
+	shardLockExpireTime = 30 * time.Second
 )
 
-// RedisManager 基于 redis 的session 管理器，实现分布寮?websocket 监听
+// RedisManager 基于 redis 的 session 管理器，实现分布式 websocket 监听
 type RedisManager struct {
 	clusterKey         string
 	sessionQueueKey    string
@@ -33,7 +37,9 @@ type RedisManager struct {
 	sessionProduceChan chan dto.Session // 抢到锁的服务，用于持续生产session到redis list的本地chan
 }
 
-// New 创建涓€涓柊鐨勫熀了redis 的session 管理鍣?// 使用 go-redis 调用 redis，超时时间请鍦?NewClient 鏃跺€欒缃?func New(client *redis.Client, opts ...Option) *RedisManager {
+// New 创建一个新的基于 redis 的 session 管理器
+// 使用 go-redis 调用 redis，超时时间请在 NewClient 时候设置
+func New(client *redis.Client, opts ...Option) *RedisManager {
 	r := &RedisManager{
 		clusterKey: defaultClusterKey,
 		client:     client,
@@ -46,7 +52,8 @@ type RedisManager struct {
 	return r
 }
 
-// Start 启动 redis 的session 管理鍣?func (r *RedisManager) Start(apInfo *dto.WebsocketAP, tokenSource oauth2.TokenSource, intents *dto.Intent) error {
+// Start 启动 redis 的 session 管理器
+func (r *RedisManager) Start(ctx context.Context, apInfo *dto.WebsocketAP, tokenSource oauth2.TokenSource, intents *dto.Intent) error {
 	defer log.Sync()
 	if err := manager.CheckSessionLimit(apInfo); err != nil {
 		log.Errorf("[ws/session/redis] session limited apInfo: %+v", apInfo)
@@ -60,8 +67,7 @@ type RedisManager struct {
 	r.sessionProduceChan = make(chan dto.Session, apInfo.Shards)
 
 	// 进行初始的session分发，抢锁，分发
-	// 閿?0s，抢到锁的进程，闇€瑕佹瘡30s续期涓€娆★紝鍙鑷繁杩樺瓨娲伙紝灏变笉鑳藉璁╁彟澶栫殑杩涚▼鎶㈠埌閿侀噸鏂拌繘琛宻hards分发
-	ctx := context.Background()
+	// 锁30s，抢到锁的进程，需要每30s续期一次，只要自己还存活，就不能够让另外的进程抢到锁重新进行shards分发
 	distributeLock := lock.New(r.clusterKey, uuid.New().String(), r.client)
 	if err := distributeLock.Lock(ctx, distributeLockExpireTime); err == nil {
 		log.Infof("[ws/session/redis] got distribute lock! i will do distributeSession, key: %s", r.clusterKey)
@@ -75,18 +81,19 @@ type RedisManager struct {
 		log.Errorf("got lock failed, err: %v", err)
 	}
 
-	// 持续 produce session，遇到网络问题在 chan 中重误	// 对于抢到了锁的服务，生产第一批session到redis list
-	// 对于没有抢到锁的服务，当ws异常，把session放回鍒?redis list 中，重新分发
+	// 持续 produce session，遇到网络问题在 chan 中重试
+	// 对于抢到了锁的服务，生产第一批session到redis list
+	// 对于没有抢到锁的服务，当ws异常，把session放回到 redis list 中，重新分发
 	go r.sessionProducer(startInterval)
 
-	return r.consume(startInterval)
+	return r.consume(ctx, startInterval)
 }
 
-func (r *RedisManager) consume(startInterval time.Duration) error {
+func (r *RedisManager) consume(ctx context.Context, startInterval time.Duration) error {
 	log.Debug("[ws/session/redis] start consume for session")
 	for {
 		// brpop 返回 key value
-		data, err := r.client.BRPop(context.Background(), startInterval*2, r.sessionQueueKey).Result()
+		data, err := r.client.BRPop(ctx, startInterval*2, r.sessionQueueKey).Result()
 		if err != nil {
 			if err != redis.Nil {
 				log.Errorf("[ws/session/redis] rpop failed, err: %v", err)
@@ -106,8 +113,8 @@ func (r *RedisManager) consume(startInterval time.Duration) error {
 			continue
 		}
 
-		go r.newConnect(*session)
-		time.Sleep(startInterval) // 启动涓€涓繛鎺ュ悗锛岀瓑寰呬竴涓嬶紝閬垮厤瑙﹀彂鏈嶅姟绔殑骞跺彂鎺у埗
+		go r.newConnect(ctx, *session)
+		time.Sleep(startInterval) // 启动一个连接后，等待一下，避免触发服务端的并发控制
 	}
 }
 
@@ -117,32 +124,35 @@ func (r *RedisManager) getShardLockKey(session dto.Session) string {
 		r.clusterKey, session.Shards.ShardID, session.Shards.ShardCount)
 }
 
-// newConnect 启动涓€涓柊鐨勮繛鎺ワ紝濡傛灉杩炴帴鍦ㄧ洃鍚繃绋嬩腑鎶ラ敊浜嗭紝鎴栬€呰杩滅鍏抽棴浜嗛摼鎺ワ紝闇€瑕佽瘑鍒叧闂殑鍘熷洜锛岃兘鍚︾户缁?resume
-// 如果能够 resume，则寰€ sessionChan 中放入带有sessionID 的session
-// 如果不能，则清理接sessionID，将 session 放入 sessionChan 为// session 的启动，交给 start 中的 for 循环执行，session 不自宸遍€掑綊杩涜閲嶈繛锛岄伩鍏嶉€掑綊娣卞害杩囨繁
-func (r *RedisManager) newConnect(session dto.Session) {
-	ctx, cancel := context.WithCancel(context.Background())
+// newConnect 启动一个新的连接，如果连接在监听过程中报错了，或者被远端关闭了链接，需要识别关闭的原因，能否继续 resume
+// 如果能够 resume，则往 sessionChan 中放入带有 sessionID 的 session
+// 如果不能，则清理掉 sessionID，将 session 放入 sessionChan 中
+// session 的启动，交给 start 中的 for 循环执行，session 不自己递归进行重连，避免递归深度过深
+func (r *RedisManager) newConnect(ctx context.Context, session dto.Session) {
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// 閿?shard，避免针对相鍚?shard 消费重复了	shardLock := lock.New(r.getShardLockKey(session), uuid.NewString(), r.client)
+	// 锁 shard，避免针对相同 shard 消费重复了
+	shardLock := lock.New(r.getShardLockKey(session), uuid.NewString(), r.client)
 	if err := shardLock.Lock(ctx, shardLockExpireTime); err != nil {
-		// shard 抢锁失败，把 session 放回去，避免上一为session 的锁释放失败，导致下涓€为session 无法启动
+		// shard 抢锁失败，把 session 放回去，避免上一个 session 的锁释放失败，导致下一个 session 无法启动
 		r.sessionProduceChan <- session
 		return
 	}
 	go shardLock.StartRenew(ctx, shardLockExpireTime)
-	// token初始化失败，重新放回鍘?	if err := token.StartRefreshAccessToken(ctx, session.TokenSource); err != nil {
+	// token初始化失败，重新放回去
+	if err := token.StartRefreshAccessToken(ctx, session.TokenSource); err != nil {
 		r.sessionProduceChan <- session
 		return
 	}
-	wsClient := websocket.ClientImpl.New(session)
+	wsClient := websocket.ClientImpl.New(ctx, session)
 	if err := wsClient.Connect(); err != nil {
 		log.Error(err)
 		r.sessionProduceChan <- session // 连接失败，丢回去队列排队重连
 		return
 	}
 	var err error
-	// 如果 session id 不为空，则执行的是resume 操作，如果为空，则执行的是identify 操作
+	// 如果 session id 不为空，则执行的是 resume 操作，如果为空，则执行的是 identify 操作
 	if session.ID != "" {
 		err = wsClient.Resume()
 	} else {
@@ -156,18 +166,19 @@ func (r *RedisManager) newConnect(session dto.Session) {
 	if err = wsClient.Listening(); err != nil {
 		log.Errorf("[ws/session/remote] Listening err %+v", err)
 		currentSession := wsClient.Session()
-		// 对于不能够进行重连的session，需要清绌?session id 为seq
+		// 对于不能够进行重连的session，需要清空 session id 与 seq
 		if manager.CanNotResume(err) {
 			currentSession.ID = ""
 			currentSession.LastSeq = 0
 		}
-		// 涓€浜涢敊璇笉鑳藉閴存潈锛屾瘮濡傛満鍣ㄤ汉琚皝绂侊紝杩欓噷灏辩洿鎺ラ€€鍑轰簡
+		// 一些错误不能够鉴权，比如机器人被封禁，这里就直接退出了
 		if manager.CanNotIdentify(err) {
 			msg := fmt.Sprintf("can not identify because server return %+v, so process exit", err)
 			log.Errorf(msg)
-			panic(msg) // 当机器人被下架，鎴栬€呭皝绂侊紝灏嗕笉鑳藉啀杩炴帴锛屾墍件panic
+			panic(msg) // 当机器人被下架，或者封禁，将不能再连接，所以 panic
 		}
-		// 灏?session 放到 session chan 中，用于启动新的连接，释放锁，当前连鎺ラ€€鍑?		shardLock.StopRenew()
+		// 将 session 放到 session chan 中，用于启动新的连接，释放锁，当前连接退出
+		shardLock.StopRenew()
 		if err = shardLock.Release(ctx); err != nil {
 			log.Errorf("[ws/session/remote] release shardLock failed, err: %s", err)
 		}

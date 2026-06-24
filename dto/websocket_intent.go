@@ -1,4 +1,4 @@
-﻿package dto
+package dto
 
 // Intent 类型
 type Intent int
@@ -45,9 +45,15 @@ const (
 
 	IntentEnterAIO Intent = 1 << 23 // 进入aio事件
 
-	// IntentGroupMessages 群消息事件	// - GROUP_AT_MESSAGE_CREATE // 群中@机器人时的消息	IntentGroupMessages Intent = 1 << 25 // 群消息事件
+	IntentGroupMembers Intent = 1 << 24 // 群成员事件
+
+	// IntentGroupMessages 群消息事件
+	// - GROUP_AT_MESSAGE_CREATE // 群中@机器人时的消息
+	IntentGroupMessages Intent = 1 << 25 // 群消息事件
+
 	IntentInteraction Intent = 1 << 26 // 互动事件
 	IntentAudit       Intent = 1 << 27 // 审核事件
+
 	// IntentForum 论坛事件
 	//  - THREAD_CREATE     // 当用户创建主题时
 	//  - THREAD_UPDATE     // 当用户更新主题时
@@ -56,11 +62,14 @@ const (
 	//  - POST_DELETE       // 当用户删除帖子时
 	//  - REPLY_CREATE      // 当用户回复评论时
 	//  - REPLY_DELETE      // 当用户回复评论时
-	//  - FORUM_PUBLISH_AUDIT_RESULT      // 当用户发表审鏍搁€氳繃无	IntentForum Intent = 1 << 28 // 论坛事件
+	//  - FORUM_PUBLISH_AUDIT_RESULT      // 当用户发表审核通过时
+	IntentForum Intent = 1 << 28 // 论坛事件
 
 	// IntentAudio
-	//  - AUDIO_START           // 音频寮€濮嬫挱鏀炬椂
-	//  - AUDIO_FINISH          // 音频播放结束无	IntentAudio          Intent = 1 << 29 // 音频机器人事件	IntentGuildAtMessage Intent = 1 << 30 // 只接收@消息事件
+	//  - AUDIO_START           // 音频开始播放时
+	//  - AUDIO_FINISH          // 音频播放结束时
+	IntentAudio          Intent = 1 << 29 // 音频机器人事件
+	IntentGuildAtMessage Intent = 1 << 30 // 只接收at消息事件
 
 	IntentNone Intent = 0
 )

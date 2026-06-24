@@ -102,6 +102,9 @@ type MessageAPI interface {
 
 	// RetractGroupMessage 撤回群消息
 	RetractGroupMessage(ctx context.Context, groupID, msgID string, opt ...options.Option) error
+
+	// PostGroupFile 上传群文件（富媒体）
+	PostGroupFile(ctx context.Context, groupID string, msg *dto.MessageMediaToCreate) (*dto.Media, error)
 }
 
 // GuildAPI guild 相关接口

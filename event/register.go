@@ -1,4 +1,4 @@
-﻿package event
+package event
 
 import (
 	"github.com/sealdice/botgo/dto"
@@ -33,9 +33,15 @@ var DefaultHandlers struct {
 	Interaction InteractionEventHandler
 
 	GroupATMessage     GroupATMessageEventHandler
+	GroupMessage       GroupMessageEventHandler
 	C2CMessage         C2CMessageEventHandler
 	SubscribeMsgStatus SubscribeMsgStatusEventHandler
 	C2CFriend          C2CFriendEventHandler
+
+	GroupAddRobot     GroupAddRobotEventHandler
+	GroupDelRobot     GroupDelRobotEventHandler
+	GroupMemberAdd    GroupMemberAddEventHandler
+	GroupMemberRemove GroupMemberRemoveEventHandler
 
 	EnterAIO EnterAIOEventHandler
 }
@@ -105,6 +111,9 @@ type InteractionEventHandler func(event *dto.WSPayload, data *dto.WSInteractionD
 // GroupATMessageEventHandler 群中at机器人消息事件handler
 type GroupATMessageEventHandler func(event *dto.WSPayload, data *dto.WSGroupATMessageData) error
 
+// GroupMessageEventHandler 群聊普通消息 (非@) 事件 handler
+type GroupMessageEventHandler func(event *dto.WSPayload, data *dto.WSGroupMessageData) error
+
 // C2CMessageEventHandler 机器人消息事件handler
 type C2CMessageEventHandler func(event *dto.WSPayload, data *dto.WSC2CMessageData) error
 
@@ -121,7 +130,20 @@ type SubscribeMsgStatusEventHandler func(event *dto.WSPayload, data *dto.WSSubsc
 // EnterAIOEventHandler 进入AIO事件 handler
 type EnterAIOEventHandler func(event *dto.WSPayload, data *dto.WSEnterAIOData) error
 
-// RegisterHandlers 注册事件回调，并返回 intent 用于 websocket 的鉴鏉?func RegisterHandlers(handlers ...interface{}) dto.Intent {
+// GroupAddRobotEventHandler 机器人进群事件 handler
+type GroupAddRobotEventHandler func(event *dto.WSPayload, data *dto.WSGroupRobotEventData) error
+
+// GroupDelRobotEventHandler 机器人退群事件 handler
+type GroupDelRobotEventHandler func(event *dto.WSPayload, data *dto.WSGroupRobotEventData) error
+
+// GroupMemberAddEventHandler 群成员加入事件 handler
+type GroupMemberAddEventHandler func(event *dto.WSPayload, data *dto.WSGroupMemberAddData) error
+
+// GroupMemberRemoveEventHandler 群成员退出事件 handler
+type GroupMemberRemoveEventHandler func(event *dto.WSPayload, data *dto.WSGroupMemberRemoveData) error
+
+// RegisterHandlers 注册事件回调，并返回 intent 用于 websocket 的鉴权
+func RegisterHandlers(handlers ...interface{}) dto.Intent {
 	var i dto.Intent
 	for _, h := range handlers {
 		switch handle := h.(type) {
@@ -149,6 +171,18 @@ type EnterAIOEventHandler func(event *dto.WSPayload, data *dto.WSEnterAIOData) e
 		case EnterAIOEventHandler:
 			DefaultHandlers.EnterAIO = handle
 			i = i | dto.EventToIntent(dto.EventEnterAIO)
+		case GroupAddRobotEventHandler:
+			DefaultHandlers.GroupAddRobot = handle
+			i = i | dto.EventToIntent(dto.EventGroupAddRobot)
+		case GroupDelRobotEventHandler:
+			DefaultHandlers.GroupDelRobot = handle
+			i = i | dto.EventToIntent(dto.EventGroupDelRobot)
+		case GroupMemberAddEventHandler:
+			DefaultHandlers.GroupMemberAdd = handle
+			i = i | dto.EventToIntent(dto.EventGroupMemberAdd)
+		case GroupMemberRemoveEventHandler:
+			DefaultHandlers.GroupMemberRemove = handle
+			i = i | dto.EventToIntent(dto.EventGroupMemberRemove)
 		default:
 		}
 	}
@@ -232,6 +266,9 @@ func registerMessageHandlers(i dto.Intent, handlers ...interface{}) dto.Intent {
 		case GroupATMessageEventHandler:
 			DefaultHandlers.GroupATMessage = handle
 			i = i | dto.EventToIntent(dto.EventGroupAtMessageCreate)
+		case GroupMessageEventHandler:
+			DefaultHandlers.GroupMessage = handle
+			i = i | dto.EventToIntent(dto.EventGroupMessageCreate)
 		case C2CMessageEventHandler:
 			DefaultHandlers.C2CMessage = handle
 			i = i | dto.EventToIntent(dto.EventC2CMessageCreate)

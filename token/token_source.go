@@ -1,4 +1,4 @@
-﻿// Package token 基于 golang.org/x/oauth2 标准实现token source
+// Package token 基于 golang.org/x/oauth2 标准实现token source
 package token
 
 import (
@@ -42,12 +42,12 @@ type qqBotTokenRsp struct {
 }
 
 func (r *qqBotTokenRsp) UnmarshalJSON(data []byte) error {
-	// 创建涓€涓复鏃剁粨鏋勪綋鏉ヨВ鏋?JSON 数据
+	// 创建一个临时结构体来解析 JSON 数据
 	var temp struct {
-		Code        int    `json:"code"`
-		Message     string `json:"message"`
-		AccessToken string `json:"access_token"`
-		ExpiresIn   string `json:"expires_in"`
+		Code        int             `json:"code"`
+		Message     string          `json:"message"`
+		AccessToken string          `json:"access_token"`
+		ExpiresIn   json.RawMessage `json:"expires_in"`
 	}
 
 	// 解析 JSON 数据到临时结构体
@@ -55,13 +55,30 @@ func (r *qqBotTokenRsp) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	// 将字符串转换为int64
-	expiresIn, err := strconv.ParseInt(temp.ExpiresIn, 10, 64)
-	if err != nil {
-		return err
+	var expiresIn int64
+	if len(temp.ExpiresIn) > 0 && string(temp.ExpiresIn) != "null" {
+		// 尝试先解析为字符串
+		var s string
+		if err := json.Unmarshal(temp.ExpiresIn, &s); err == nil {
+			if s != "" {
+				var err error
+				expiresIn, err = strconv.ParseInt(s, 10, 64)
+				if err != nil {
+					return err
+				}
+			}
+		} else {
+			// 尝试解析为整型
+			var n int64
+			if err := json.Unmarshal(temp.ExpiresIn, &n); err == nil {
+				expiresIn = n
+			} else {
+				return err
+			}
+		}
 	}
 
-	// 璧嬪€肩粰缁撴瀯浣撳瓧娈?
+	// 赋值给结构体字段
 	r.ExpiresIn = expiresIn
 	r.Code = temp.Code
 	r.Message = temp.Message
@@ -69,7 +86,7 @@ func (r *qqBotTokenRsp) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// QQBotCredentials QQ机器人appid銆乻ecret
+// QQBotCredentials QQ机器人appid、secret
 type QQBotCredentials struct {
 	AppID     string `yaml:"appid"`
 	AppSecret string `yaml:"secret"`

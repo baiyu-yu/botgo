@@ -1,4 +1,4 @@
-﻿package v1
+package v1
 
 import (
 	"context"
@@ -59,7 +59,8 @@ func (o *openAPI) Messages(ctx context.Context, channelID string, pager *dto.Mes
 	return messages, nil
 }
 
-// PostMessage 发消息func (o *openAPI) PostMessage(ctx context.Context, channelID string, msg *dto.MessageToCreate,
+// PostMessage 发消息
+func (o *openAPI) PostMessage(ctx context.Context, channelID string, msg *dto.MessageToCreate,
 	opt ...options.Option) (*dto.Message, error) {
 	reqCMD := o.request(ctx).
 		SetResult(dto.Message{}).
@@ -111,7 +112,8 @@ func (o *openAPI) RetractC2CMessage(ctx context.Context,
 	return err
 }
 
-// RetractGroupMessage 撤回群消息func (o *openAPI) RetractGroupMessage(ctx context.Context,
+// RetractGroupMessage 撤回群消息
+func (o *openAPI) RetractGroupMessage(ctx context.Context,
 	groupID, msgID string, opt ...options.Option) error {
 	reqCMD := o.request(ctx).
 		SetPathParam("group_id", groupID).
@@ -121,7 +123,8 @@ func (o *openAPI) RetractC2CMessage(ctx context.Context,
 	return err
 }
 
-// PostSettingGuide 鍙戦€佽缃紩瀵兼秷息 atUserID为要at的用或func (o *openAPI) PostSettingGuide(ctx context.Context,
+// PostSettingGuide 发送设置引导消息 atUserID为要at的用户
+func (o *openAPI) PostSettingGuide(ctx context.Context,
 	channelID string, atUserIDs []string, opt ...options.Option) (*dto.Message, error) {
 	var content string
 	for _, userID := range atUserIDs {
@@ -151,7 +154,8 @@ func getGroupURIBySendType(msgType dto.SendType) uri {
 	}
 }
 
-// PostGroupMessage 回复群消息func (o *openAPI) PostGroupMessage(ctx context.Context, groupID string, msg dto.APIMessage,
+// PostGroupMessage 回复群消息
+func (o *openAPI) PostGroupMessage(ctx context.Context, groupID string, msg dto.APIMessage,
 	opt ...options.Option) (*dto.Message, error) {
 	reqCMD := o.request(ctx).
 		SetResult(dto.Message{}).
@@ -187,6 +191,21 @@ func (o *openAPI) PostC2CMessage(ctx context.Context, userID string, msg dto.API
 		return nil, err
 	}
 	return resp.Result().(*dto.Message), nil
+}
+
+// PostGroupFile 上传群文件（富媒体）
+func (o *openAPI) PostGroupFile(ctx context.Context, groupID string,
+	msg *dto.MessageMediaToCreate) (*dto.Media, error) {
+	reqCMD := o.request(ctx).
+		SetResult(dto.Media{}).
+		SetPathParam("group_id", groupID).
+		SetBody(msg)
+
+	resp, err := reqCMD.Execute(http.MethodPost, o.getURL(groupRichMediaURI))
+	if err != nil {
+		return nil, err
+	}
+	return resp.Result().(*dto.Media), nil
 }
 
 func baseRequest(ctx context.Context, reqCMD *resty.Request, method, url string, opt ...options.Option) (

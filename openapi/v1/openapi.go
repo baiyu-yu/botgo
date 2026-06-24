@@ -1,4 +1,5 @@
-﻿// Package v1 是openapi v1 版本的实鐜般€?package v1
+// Package v1 是 openapi v1 版本的实现。
+package v1
 
 import (
 	"context"
@@ -8,7 +9,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-resty/resty/v2" // resty 是一个优绉€的rest api 客户端，可以极大的减少开发基了rest 标准接口求请求的封装工作閲?	"github.com/sealdice/botgo/constant"
+	"github.com/go-resty/resty/v2" // resty 是一个优秀的 rest api 客户端，可以极大的减少开发基于 rest 标准接口求请求 of 封装工作量
+	"github.com/sealdice/botgo/constant"
 	"github.com/sealdice/botgo/errs"
 	"github.com/sealdice/botgo/log"
 	"github.com/sealdice/botgo/openapi"
@@ -16,7 +18,8 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// MaxIdleConns 默认指定空闲连接池大灏?const MaxIdleConns = 3000
+// MaxIdleConns 默认指定空闲连接池大小
+const MaxIdleConns = 3000
 
 type openAPI struct {
 	appID       string
@@ -24,7 +27,8 @@ type openAPI struct {
 	timeout     time.Duration
 
 	sandbox     bool   // 请求沙箱环境
-	debug       bool   // debug 模式，调试sdk鏃跺€欎娇用	lastTraceID string // lastTraceID id
+	debug       bool   // debug 模式，调试sdk时候使用
+	lastTraceID string // lastTraceID id
 
 	restyClient *resty.Client // resty client 复用
 }
@@ -44,14 +48,15 @@ func (o *openAPI) TraceID() string {
 	return o.lastTraceID
 }
 
-// Setup 生成涓€涓疄渚?func (o *openAPI) Setup(botAppID string, tokenSource oauth2.TokenSource, inSandbox bool) openapi.OpenAPI {
+// Setup 生成一个实例
+func (o *openAPI) Setup(botAppID string, tokenSource oauth2.TokenSource, inSandbox bool) openapi.OpenAPI {
 	api := &openAPI{
 		appID:       botAppID,
 		tokenSource: tokenSource,
 		timeout:     5 * time.Second,
 		sandbox:     inSandbox,
 	}
-	api.setupClient(botAppID) // 初始化可复用的client
+	api.setupClient(botAppID) // 初始化可复用的 client
 	return api
 }
 
@@ -73,10 +78,10 @@ func (o *openAPI) Transport(ctx context.Context, method, url string, body interf
 	return resp.Body(), err
 }
 
-// 初始鍖?client
+// 初始化 client
 func (o *openAPI) setupClient(appID string) {
 	o.restyClient = resty.New().
-		SetTransport(createTransport(nil, MaxIdleConns)). // 自定涔?transport
+		SetTransport(createTransport(nil, MaxIdleConns)). // 自定义 transport
 		SetLogger(log.DefaultLogger).
 		SetDebug(o.debug).
 		SetTimeout(o.timeout).
@@ -85,20 +90,26 @@ func (o *openAPI) setupClient(appID string) {
 		SetPreRequestHook(
 			func(_ *resty.Client, request *http.Request) error {
 				// 执行请求前过滤器
-				// 由于鍦?`OnBeforeRequest` 的时候，request 还没生成，所件filter 不能使用，所以放鍒?`PreRequestHook`
+				// 由于在 OnBeforeRequest 的时候，request 还没生成，所以 filter 不能使用，所以放到 PreRequestHook
 				return openapi.DoReqFilterChains(request, nil)
 			},
 		).
 		OnBeforeRequest(
-			func(c *resty.Client, _ *resty.Request) error {
+			func(c *resty.Client, r *resty.Request) error {
 				tk, err := o.tokenSource.Token()
 				if err != nil {
 					log.Errorf("[setupClient] retrieve token failed:%s", err)
 					return err
 				}
+				r.SetAuthScheme(tk.TokenType)
+				r.SetAuthToken(tk.AccessToken)
 				c.SetAuthScheme(tk.TokenType)
-				log.Debugf("token type:%s", tk.TokenType)
 				c.SetAuthToken(tk.AccessToken)
+
+				if r.Header == nil {
+					r.Header = make(http.Header)
+				}
+				r.Header.Set("X-Union-Appid", o.appID)
 				return nil
 			},
 		).
@@ -112,7 +123,7 @@ func (o *openAPI) setupClient(appID string) {
 				}
 				traceID := resp.Header().Get(constant.HeaderTraceID)
 				o.lastTraceID = traceID
-				// 非成功含义的鐘舵€佺爜锛岄渶瑕佽繑鍥?error 供调用方识别
+				// 非成功含义的状态码，需要返回 error 供调用方识别
 				if !openapi.IsSuccessStatus(resp.StatusCode()) {
 					o.handleError(resp)
 					return errs.New(resp.StatusCode(), string(resp.Body()), traceID)
@@ -122,12 +133,12 @@ func (o *openAPI) setupClient(appID string) {
 		)
 }
 
-// request 每个请求，都闇€瑕佸垱寤轰竴为request
+// request 每个请求，都需要创建一个 request
 func (o *openAPI) request(ctx context.Context) *resty.Request {
 	return o.restyClient.R().SetContext(ctx)
 }
 
-// GetAppID 获取接口地址，会处理沙箱环境判断
+// GetAppID 获取appid
 func (o *openAPI) GetAppID() string {
 	if o == nil {
 		return ""
@@ -139,10 +150,12 @@ func (o *openAPI) GetAppID() string {
 type errBody struct {
 	Message string `json:"message"`  // 错误原因
 	Code    int    `json:"code"`     // 错误码，后续废弃
-	ErrCode int    `json:"err_code"` // 错误鐮?	TraceID string `json:"trace_id"` // 服务端traceID, 用于问题排查
+	ErrCode int    `json:"err_code"` // 错误码
+	TraceID string `json:"trace_id"` // 服务端traceID, 用于问题排查
 }
 
-// handleError 处理openapi调用失败的情鍐?func (o *openAPI) handleError(resp *resty.Response) {
+// handleError 处理openapi调用失败的情况
+func (o *openAPI) handleError(resp *resty.Response) {
 	var b errBody
 	err := json.Unmarshal(resp.Body(), &b)
 	if err != nil {

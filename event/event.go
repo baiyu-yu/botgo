@@ -1,4 +1,4 @@
-﻿// Package event 事件处理注册
+// Package event 事件处理注册
 package event
 
 import (
@@ -56,15 +56,21 @@ var eventParseFuncMap = map[dto.OPCode]map[dto.EventType]eventParseFunc{
 
 		dto.EventInteractionCreate:    interactionHandler,
 		dto.EventGroupAtMessageCreate: groupAtMessageHandler,
+		dto.EventGroupMessageCreate:   groupMessageHandler,
 		dto.EventC2CMessageCreate:     c2cMessageHandler,
 		dto.EventSubscribeMsgStatus:   subscribeStatusHandler,
 		dto.EventC2CFriendAdd:         c2cFriendAddHandler,
 		dto.EventC2CFriendDel:         c2cFriendDelHandler,
+		dto.EventGroupAddRobot:        groupAddRobotHandler,
+		dto.EventGroupDelRobot:        groupDelRobotHandler,
+		dto.EventGroupMemberAdd:       groupMemberAddHandler,
+		dto.EventGroupMemberRemove:    groupMemberRemoveHandler,
 		dto.EventEnterAIO:             enterAIOHandler,
 	},
 }
 
-// RegisterHandler 注册回调事件处理鍣?func RegisterHandler(opCode dto.OPCode, eventType dto.EventType, handler eventParseFunc) {
+// RegisterHandler 注册回调事件处理器
+func RegisterHandler(opCode dto.OPCode, eventType dto.EventType, handler eventParseFunc) {
 	eventParseFuncMapLock.Lock()
 	defer eventParseFuncMapLock.Unlock()
 	if eventParseFuncMap[opCode] == nil {
@@ -185,6 +191,17 @@ func groupAtMessageHandler(payload *dto.WSPayload, message []byte) error {
 	}
 	if DefaultHandlers.GroupATMessage != nil {
 		return DefaultHandlers.GroupATMessage(payload, data)
+	}
+	return nil
+}
+
+func groupMessageHandler(payload *dto.WSPayload, message []byte) error {
+	data := &dto.WSGroupMessageData{}
+	if err := ParseData(message, data); err != nil {
+		return err
+	}
+	if DefaultHandlers.GroupMessage != nil {
+		return DefaultHandlers.GroupMessage(payload, data)
 	}
 	return nil
 }
@@ -350,6 +367,50 @@ func enterAIOHandler(payload *dto.WSPayload, message []byte) error {
 	}
 	if DefaultHandlers.EnterAIO != nil {
 		return DefaultHandlers.EnterAIO(payload, data)
+	}
+	return nil
+}
+
+func groupAddRobotHandler(payload *dto.WSPayload, message []byte) error {
+	data := &dto.WSGroupRobotEventData{}
+	if err := ParseData(message, data); err != nil {
+		return err
+	}
+	if DefaultHandlers.GroupAddRobot != nil {
+		return DefaultHandlers.GroupAddRobot(payload, data)
+	}
+	return nil
+}
+
+func groupDelRobotHandler(payload *dto.WSPayload, message []byte) error {
+	data := &dto.WSGroupRobotEventData{}
+	if err := ParseData(message, data); err != nil {
+		return err
+	}
+	if DefaultHandlers.GroupDelRobot != nil {
+		return DefaultHandlers.GroupDelRobot(payload, data)
+	}
+	return nil
+}
+
+func groupMemberAddHandler(payload *dto.WSPayload, message []byte) error {
+	data := &dto.WSGroupMemberAddData{}
+	if err := ParseData(message, data); err != nil {
+		return err
+	}
+	if DefaultHandlers.GroupMemberAdd != nil {
+		return DefaultHandlers.GroupMemberAdd(payload, data)
+	}
+	return nil
+}
+
+func groupMemberRemoveHandler(payload *dto.WSPayload, message []byte) error {
+	data := &dto.WSGroupMemberRemoveData{}
+	if err := ParseData(message, data); err != nil {
+		return err
+	}
+	if DefaultHandlers.GroupMemberRemove != nil {
+		return DefaultHandlers.GroupMemberRemove(payload, data)
 	}
 	return nil
 }

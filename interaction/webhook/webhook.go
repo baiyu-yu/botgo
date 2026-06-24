@@ -1,4 +1,4 @@
-﻿// Package webhook HTTP回调处理
+// Package webhook HTTP回调处理
 package webhook
 
 import (
@@ -20,12 +20,14 @@ type ack struct {
 	Data uint32     `json:"d"`
 }
 
-// GenHeartbeatACK 生成 http gateway 的心跳回鍖?func GenHeartbeatACK(seq uint32) string {
+// GenHeartbeatACK 生成 http gateway 的心跳回包
+func GenHeartbeatACK(seq uint32) string {
 	s, _ := json.Marshal(ack{Op: dto.WSHeartbeatAck, Data: seq})
 	return string(s)
 }
 
-// GenDispatchACK 生成事件包的回包，如果处理失败，则返回的 d 为1，服务端会尝试重误func GenDispatchACK(success bool) string {
+// GenDispatchACK 生成事件包的回包，如果处理失败，则返回的 d 为 1，服务端会尝试重试
+func GenDispatchACK(success bool) string {
 	var r uint32
 	if !success {
 		r = 1
@@ -34,7 +36,9 @@ type ack struct {
 	return string(s)
 }
 
-// Deprecated: DefaultGetSecretFunc 默认的获可secret 的函数，默认从环境变量读可// 寮€鍙戣€呭鏋滈渶瑕佷粠鑷繁鐨勯厤缃枃浠讹紝鎴栬€呮槸鍏朵粬鍦版柟鑾峰彇 secret，可以重写这个函鏁?var DefaultGetSecretFunc = func() string {
+// Deprecated: DefaultGetSecretFunc 默认的获取 secret 的函数，默认从环境变量读取
+// 开发者如果需要从自己的配置文件，或者是其他地方获取 secret，可以重写这个函数
+var DefaultGetSecretFunc = func() string {
 	return os.Getenv("QQBotSecret")
 }
 

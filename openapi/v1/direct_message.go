@@ -1,4 +1,4 @@
-﻿package v1
+package v1
 
 import (
 	"context"
@@ -22,7 +22,8 @@ func (o *openAPI) CreateDirectMessage(ctx context.Context,
 	return resp.Result().(*dto.DirectMessage), nil
 }
 
-// PostDirectMessage 在私信频道内发消息func (o *openAPI) PostDirectMessage(ctx context.Context,
+// PostDirectMessage 在私信频道内发消息
+func (o *openAPI) PostDirectMessage(ctx context.Context,
 	dm *dto.DirectMessage, msg *dto.MessageToCreate, opt ...options.Option) (*dto.Message, error) {
 	reqCMD := o.request(ctx).
 		SetResult(dto.Message{}).

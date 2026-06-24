@@ -1,4 +1,4 @@
-﻿package dto
+package dto
 
 func init() {
 	eventIntentMap = transposeIntentEventMap(intentEventMap)
@@ -39,22 +39,29 @@ const (
 	EventForumAuditResult      EventType = "FORUM_PUBLISH_AUDIT_RESULT"
 	EventInteractionCreate     EventType = "INTERACTION_CREATE"
 	EventGroupAtMessageCreate  EventType = "GROUP_AT_MESSAGE_CREATE"
+	EventGroupMessageCreate    EventType = "GROUP_MESSAGE_CREATE"
 	EventC2CMessageCreate      EventType = "C2C_MESSAGE_CREATE"
 	EventSubscribeMsgStatus    EventType = "SUBSCRIBE_MESSAGE_STATUS"
 	EventC2CFriendAdd          EventType = "FRIEND_ADD"
 	EventC2CFriendDel          EventType = "FRIEND_DEL"
+	EventGroupAddRobot         EventType = "GROUP_ADD_ROBOT"
+	EventGroupDelRobot         EventType = "GROUP_DEL_ROBOT"
+	EventGroupMemberAdd        EventType = "GROUP_MEMBER_ADD"
+	EventGroupMemberRemove     EventType = "GROUP_MEMBER_REMOVE"
 	EventEnterAIO              EventType = "ENTER_AIO"
 )
 
-// intentEventMap 不同 intent 对应的事件定涔?var intentEventMap = map[Intent][]EventType{
+// intentEventMap 不同 intent 对应的事件定义
+var intentEventMap = map[Intent][]EventType{
 	IntentGuilds: {
 		EventGuildCreate, EventGuildUpdate, EventGuildDelete,
 		EventChannelCreate, EventChannelUpdate, EventChannelDelete,
 	},
 	IntentGuildMembers:  {EventGuildMemberAdd, EventGuildMemberUpdate, EventGuildMemberRemove},
 	IntentGuildMessages: {EventMessageCreate, EventMessageDelete},
-	IntentGroupMessages: {EventGroupAtMessageCreate, EventC2CMessageCreate, EventSubscribeMsgStatus,
-		EventC2CFriendAdd, EventC2CFriendDel},
+	IntentGroupMessages: {EventGroupAtMessageCreate, EventGroupMessageCreate, EventC2CMessageCreate, EventSubscribeMsgStatus,
+		EventC2CFriendAdd, EventC2CFriendDel, EventGroupAddRobot, EventGroupDelRobot},
+	IntentGroupMembers: {EventGroupMemberAdd, EventGroupMemberRemove},
 
 	IntentGuildMessageReactions: {EventMessageReactionAdd, EventMessageReactionRemove},
 	IntentGuildAtMessage:        {EventAtMessageCreate, EventPublicMessageDelete},
@@ -71,7 +78,7 @@ const (
 
 var eventIntentMap = transposeIntentEventMap(intentEventMap)
 
-// transposeIntentEventMap 转置 intent 为event 的关系，用于根据 event 找到 intent
+// transposeIntentEventMap 转置 intent 与 event 的关系，用于根据 event 找到 intent
 func transposeIntentEventMap(input map[Intent][]EventType) map[EventType]Intent {
 	result := make(map[EventType]Intent)
 	for i, eventTypes := range input {
