@@ -35,6 +35,11 @@ func (l *ChanManager) Start(ctx context.Context, apInfo *dto.WebsocketAP, tokenS
 	log.Infof("[ws/session/local] will start %d sessions and per session start interval is %s",
 		apInfo.Shards, startInterval)
 
+	var appID string
+	if botTokenSource, ok := tokenSource.(interface{ GetAppID() string }); ok {
+		appID = botTokenSource.GetAppID()
+	}
+
 	// 按照shards数量初始化，用于启动连接的管理
 	l.sessionChan = make(chan dto.Session, apInfo.Shards)
 	for i := uint32(0); i < apInfo.Shards; i++ {
@@ -47,6 +52,7 @@ func (l *ChanManager) Start(ctx context.Context, apInfo *dto.WebsocketAP, tokenS
 				ShardID:    i,
 				ShardCount: apInfo.Shards,
 			},
+			AppID: appID,
 		}
 		l.sessionChan <- session
 	}

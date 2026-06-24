@@ -94,11 +94,24 @@ func ParseAndHandle(payload *dto.WSPayload) error {
 	if h, ok := getHandler(payload.OPCode, payload.Type); ok {
 		return h(payload, payload.RawMessage)
 	}
-	// 透传handler，如果未注册具体类型的handler，会统一鎶曢€掑埌杩欎釜 handler
-	if DefaultHandlers.Plain != nil {
-		return DefaultHandlers.Plain(payload, payload.RawMessage)
+	// 透传handler
+	hStruct := getHandlers(payload)
+	if hStruct.Plain != nil {
+		return hStruct.Plain(payload, payload.RawMessage)
 	}
 	return nil
+}
+
+func getHandlers(payload *dto.WSPayload) *Handlers {
+	if payload != nil && payload.Session != nil && payload.Session.AppID != "" {
+		handlersMu.RLock()
+		h, ok := DefaultHandlersMap[payload.Session.AppID]
+		handlersMu.RUnlock()
+		if ok {
+			return h
+		}
+	}
+	return &DefaultHandlers
 }
 
 // ParseData 解析数据
@@ -112,8 +125,9 @@ func guildHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.Guild != nil {
-		return DefaultHandlers.Guild(payload, data)
+	h := getHandlers(payload)
+	if h.Guild != nil {
+		return h.Guild(payload, data)
 	}
 	return nil
 }
@@ -123,8 +137,9 @@ func channelHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.Channel != nil {
-		return DefaultHandlers.Channel(payload, data)
+	h := getHandlers(payload)
+	if h.Channel != nil {
+		return h.Channel(payload, data)
 	}
 	return nil
 }
@@ -134,8 +149,9 @@ func guildMemberHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.GuildMember != nil {
-		return DefaultHandlers.GuildMember(payload, data)
+	h := getHandlers(payload)
+	if h.GuildMember != nil {
+		return h.GuildMember(payload, data)
 	}
 	return nil
 }
@@ -145,8 +161,9 @@ func messageHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.Message != nil {
-		return DefaultHandlers.Message(payload, data)
+	h := getHandlers(payload)
+	if h.Message != nil {
+		return h.Message(payload, data)
 	}
 	return nil
 }
@@ -156,8 +173,9 @@ func messageDeleteHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.MessageDelete != nil {
-		return DefaultHandlers.MessageDelete(payload, data)
+	h := getHandlers(payload)
+	if h.MessageDelete != nil {
+		return h.MessageDelete(payload, data)
 	}
 	return nil
 }
@@ -167,8 +185,9 @@ func messageReactionHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.MessageReaction != nil {
-		return DefaultHandlers.MessageReaction(payload, data)
+	h := getHandlers(payload)
+	if h.MessageReaction != nil {
+		return h.MessageReaction(payload, data)
 	}
 	return nil
 }
@@ -178,8 +197,9 @@ func atMessageHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.ATMessage != nil {
-		return DefaultHandlers.ATMessage(payload, data)
+	h := getHandlers(payload)
+	if h.ATMessage != nil {
+		return h.ATMessage(payload, data)
 	}
 	return nil
 }
@@ -189,8 +209,9 @@ func groupAtMessageHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.GroupATMessage != nil {
-		return DefaultHandlers.GroupATMessage(payload, data)
+	h := getHandlers(payload)
+	if h.GroupATMessage != nil {
+		return h.GroupATMessage(payload, data)
 	}
 	return nil
 }
@@ -200,8 +221,9 @@ func groupMessageHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.GroupMessage != nil {
-		return DefaultHandlers.GroupMessage(payload, data)
+	h := getHandlers(payload)
+	if h.GroupMessage != nil {
+		return h.GroupMessage(payload, data)
 	}
 	return nil
 }
@@ -211,8 +233,9 @@ func c2cMessageHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.C2CMessage != nil {
-		return DefaultHandlers.C2CMessage(payload, data)
+	h := getHandlers(payload)
+	if h.C2CMessage != nil {
+		return h.C2CMessage(payload, data)
 	}
 	return nil
 }
@@ -222,8 +245,9 @@ func subscribeStatusHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.SubscribeMsgStatus != nil {
-		return DefaultHandlers.SubscribeMsgStatus(payload, data)
+	h := getHandlers(payload)
+	if h.SubscribeMsgStatus != nil {
+		return h.SubscribeMsgStatus(payload, data)
 	}
 	return nil
 }
@@ -233,8 +257,9 @@ func c2cFriendDelHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.C2CFriend != nil {
-		return DefaultHandlers.C2CFriend(payload, data)
+	h := getHandlers(payload)
+	if h.C2CFriend != nil {
+		return h.C2CFriend(payload, data)
 	}
 	return nil
 }
@@ -244,8 +269,9 @@ func c2cFriendAddHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.C2CFriend != nil {
-		return DefaultHandlers.C2CFriend(payload, data)
+	h := getHandlers(payload)
+	if h.C2CFriend != nil {
+		return h.C2CFriend(payload, data)
 	}
 	return nil
 }
@@ -255,8 +281,9 @@ func publicMessageDeleteHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.PublicMessageDelete != nil {
-		return DefaultHandlers.PublicMessageDelete(payload, data)
+	h := getHandlers(payload)
+	if h.PublicMessageDelete != nil {
+		return h.PublicMessageDelete(payload, data)
 	}
 	return nil
 }
@@ -266,8 +293,9 @@ func directMessageHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.DirectMessage != nil {
-		return DefaultHandlers.DirectMessage(payload, data)
+	h := getHandlers(payload)
+	if h.DirectMessage != nil {
+		return h.DirectMessage(payload, data)
 	}
 	return nil
 }
@@ -277,8 +305,9 @@ func directMessageDeleteHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.DirectMessageDelete != nil {
-		return DefaultHandlers.DirectMessageDelete(payload, data)
+	h := getHandlers(payload)
+	if h.DirectMessageDelete != nil {
+		return h.DirectMessageDelete(payload, data)
 	}
 	return nil
 }
@@ -288,8 +317,9 @@ func audioHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.Audio != nil {
-		return DefaultHandlers.Audio(payload, data)
+	h := getHandlers(payload)
+	if h.Audio != nil {
+		return h.Audio(payload, data)
 	}
 	return nil
 }
@@ -299,8 +329,9 @@ func threadHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.Thread != nil {
-		return DefaultHandlers.Thread(payload, data)
+	h := getHandlers(payload)
+	if h.Thread != nil {
+		return h.Thread(payload, data)
 	}
 	return nil
 }
@@ -310,8 +341,9 @@ func postHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.Post != nil {
-		return DefaultHandlers.Post(payload, data)
+	h := getHandlers(payload)
+	if h.Post != nil {
+		return h.Post(payload, data)
 	}
 	return nil
 }
@@ -321,8 +353,9 @@ func replyHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.Reply != nil {
-		return DefaultHandlers.Reply(payload, data)
+	h := getHandlers(payload)
+	if h.Reply != nil {
+		return h.Reply(payload, data)
 	}
 	return nil
 }
@@ -332,8 +365,9 @@ func forumAuditHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.ForumAudit != nil {
-		return DefaultHandlers.ForumAudit(payload, data)
+	h := getHandlers(payload)
+	if h.ForumAudit != nil {
+		return h.ForumAudit(payload, data)
 	}
 	return nil
 }
@@ -343,8 +377,9 @@ func messageAuditHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.MessageAudit != nil {
-		return DefaultHandlers.MessageAudit(payload, data)
+	h := getHandlers(payload)
+	if h.MessageAudit != nil {
+		return h.MessageAudit(payload, data)
 	}
 	return nil
 }
@@ -354,8 +389,9 @@ func interactionHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.Interaction != nil {
-		return DefaultHandlers.Interaction(payload, data)
+	h := getHandlers(payload)
+	if h.Interaction != nil {
+		return h.Interaction(payload, data)
 	}
 	return nil
 }
@@ -365,8 +401,9 @@ func enterAIOHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.EnterAIO != nil {
-		return DefaultHandlers.EnterAIO(payload, data)
+	h := getHandlers(payload)
+	if h.EnterAIO != nil {
+		return h.EnterAIO(payload, data)
 	}
 	return nil
 }
@@ -376,8 +413,9 @@ func groupAddRobotHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.GroupAddRobot != nil {
-		return DefaultHandlers.GroupAddRobot(payload, data)
+	h := getHandlers(payload)
+	if h.GroupAddRobot != nil {
+		return h.GroupAddRobot(payload, data)
 	}
 	return nil
 }
@@ -387,8 +425,9 @@ func groupDelRobotHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.GroupDelRobot != nil {
-		return DefaultHandlers.GroupDelRobot(payload, data)
+	h := getHandlers(payload)
+	if h.GroupDelRobot != nil {
+		return h.GroupDelRobot(payload, data)
 	}
 	return nil
 }
@@ -398,8 +437,9 @@ func groupMemberAddHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.GroupMemberAdd != nil {
-		return DefaultHandlers.GroupMemberAdd(payload, data)
+	h := getHandlers(payload)
+	if h.GroupMemberAdd != nil {
+		return h.GroupMemberAdd(payload, data)
 	}
 	return nil
 }
@@ -409,8 +449,9 @@ func groupMemberRemoveHandler(payload *dto.WSPayload, message []byte) error {
 	if err := ParseData(message, data); err != nil {
 		return err
 	}
-	if DefaultHandlers.GroupMemberRemove != nil {
-		return DefaultHandlers.GroupMemberRemove(payload, data)
+	h := getHandlers(payload)
+	if h.GroupMemberRemove != nil {
+		return h.GroupMemberRemove(payload, data)
 	}
 	return nil
 }

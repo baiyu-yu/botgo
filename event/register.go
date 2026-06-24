@@ -1,14 +1,17 @@
 package event
 
 import (
+	"sync"
+
 	"github.com/sealdice/botgo/dto"
 )
 
-// DefaultHandlers 默认的handler 结构，管理所有支持的 handler 类型
-var DefaultHandlers struct {
+// Handlers 管理所有支持的 handler 类型
+type Handlers struct {
 	Ready       ReadyHandler
 	ErrorNotify ErrorNotifyHandler
 	Plain       PlainEventHandler
+	PlainTarget PlainEventHandler // 仅兼容
 
 	Guild       GuildEventHandler
 	GuildMember GuildMemberEventHandler
@@ -46,10 +49,20 @@ var DefaultHandlers struct {
 	EnterAIO EnterAIOEventHandler
 }
 
+// DefaultHandlers 默认的 handler 实例
+var DefaultHandlers Handlers
+
+var (
+	// DefaultHandlersMap 保存各个 AppID 的事件回调结构体
+	DefaultHandlersMap = make(map[string]*Handlers)
+	handlersMu         sync.RWMutex
+)
+
 // ReadyHandler 可以处理 ws 的ready 事件
 type ReadyHandler func(event *dto.WSPayload, data *dto.WSReadyData)
 
-// ErrorNotifyHandler 当ws 连接发生错误的时候，会回调，方便使用方监控相关错误// 比如 reconnect invalidSession 等错误，错误可以转换为bot.Err
+// ErrorNotifyHandler 当ws 连接发生错误的时候，会回调，方便使用方监控相关错误
+// 比如 reconnect invalidSession 等错误，错误可以转换为bot.Err
 type ErrorNotifyHandler func(err error)
 
 // PlainEventHandler 透传handler
@@ -144,71 +157,87 @@ type GroupMemberRemoveEventHandler func(event *dto.WSPayload, data *dto.WSGroupM
 
 // RegisterHandlers 注册事件回调，并返回 intent 用于 websocket 的鉴权
 func RegisterHandlers(handlers ...interface{}) dto.Intent {
+	return registerHandlers(&DefaultHandlers, handlers...)
+}
+
+// RegisterHandlersByAppID 针对特定 AppID 注册事件回调
+func RegisterHandlersByAppID(appID string, handlers ...interface{}) dto.Intent {
+	handlersMu.Lock()
+	hStruct, ok := DefaultHandlersMap[appID]
+	if !ok {
+		hStruct = &Handlers{}
+		DefaultHandlersMap[appID] = hStruct
+	}
+	handlersMu.Unlock()
+	return registerHandlers(hStruct, handlers...)
+}
+
+func registerHandlers(hStruct *Handlers, handlers ...interface{}) dto.Intent {
 	var i dto.Intent
 	for _, h := range handlers {
 		switch handle := h.(type) {
 		case ReadyHandler:
-			DefaultHandlers.Ready = handle
+			hStruct.Ready = handle
 		case ErrorNotifyHandler:
-			DefaultHandlers.ErrorNotify = handle
+			hStruct.ErrorNotify = handle
 		case PlainEventHandler:
-			DefaultHandlers.Plain = handle
+			hStruct.Plain = handle
 		case AudioEventHandler:
-			DefaultHandlers.Audio = handle
+			hStruct.Audio = handle
 			i = i | dto.EventToIntent(
 				dto.EventAudioStart, dto.EventAudioFinish,
 				dto.EventAudioOnMic, dto.EventAudioOffMic,
 			)
 		case InteractionEventHandler:
-			DefaultHandlers.Interaction = handle
+			hStruct.Interaction = handle
 			i = i | dto.EventToIntent(dto.EventInteractionCreate)
 		case SubscribeMsgStatusEventHandler:
-			DefaultHandlers.SubscribeMsgStatus = handle
+			hStruct.SubscribeMsgStatus = handle
 			i = i | dto.EventToIntent(dto.EventSubscribeMsgStatus)
 		case C2CFriendEventHandler:
-			DefaultHandlers.C2CFriend = handle
+			hStruct.C2CFriend = handle
 			i = i | dto.EventToIntent(dto.EventC2CFriendAdd)
 		case EnterAIOEventHandler:
-			DefaultHandlers.EnterAIO = handle
+			hStruct.EnterAIO = handle
 			i = i | dto.EventToIntent(dto.EventEnterAIO)
 		case GroupAddRobotEventHandler:
-			DefaultHandlers.GroupAddRobot = handle
+			hStruct.GroupAddRobot = handle
 			i = i | dto.EventToIntent(dto.EventGroupAddRobot)
 		case GroupDelRobotEventHandler:
-			DefaultHandlers.GroupDelRobot = handle
+			hStruct.GroupDelRobot = handle
 			i = i | dto.EventToIntent(dto.EventGroupDelRobot)
 		case GroupMemberAddEventHandler:
-			DefaultHandlers.GroupMemberAdd = handle
+			hStruct.GroupMemberAdd = handle
 			i = i | dto.EventToIntent(dto.EventGroupMemberAdd)
 		case GroupMemberRemoveEventHandler:
-			DefaultHandlers.GroupMemberRemove = handle
+			hStruct.GroupMemberRemove = handle
 			i = i | dto.EventToIntent(dto.EventGroupMemberRemove)
 		default:
 		}
 	}
-	i = i | registerRelationHandlers(i, handlers...)
-	i = i | registerMessageHandlers(i, handlers...)
-	i = i | registerForumHandlers(i, handlers...)
+	i = i | registerRelationHandlers(hStruct, i, handlers...)
+	i = i | registerMessageHandlers(hStruct, i, handlers...)
+	i = i | registerForumHandlers(hStruct, i, handlers...)
 
 	return i
 }
 
-func registerForumHandlers(i dto.Intent, handlers ...interface{}) dto.Intent {
+func registerForumHandlers(hStruct *Handlers, i dto.Intent, handlers ...interface{}) dto.Intent {
 	for _, h := range handlers {
 		switch handle := h.(type) {
 		case ThreadEventHandler:
-			DefaultHandlers.Thread = handle
+			hStruct.Thread = handle
 			i = i | dto.EventToIntent(
 				dto.EventForumThreadCreate, dto.EventForumThreadUpdate, dto.EventForumThreadDelete,
 			)
 		case PostEventHandler:
-			DefaultHandlers.Post = handle
+			hStruct.Post = handle
 			i = i | dto.EventToIntent(dto.EventForumPostCreate, dto.EventForumPostDelete)
 		case ReplyEventHandler:
-			DefaultHandlers.Reply = handle
+			hStruct.Reply = handle
 			i = i | dto.EventToIntent(dto.EventForumReplyCreate, dto.EventForumReplyDelete)
 		case ForumAuditEventHandler:
-			DefaultHandlers.ForumAudit = handle
+			hStruct.ForumAudit = handle
 			i = i | dto.EventToIntent(dto.EventForumAuditResult)
 		default:
 		}
@@ -217,17 +246,17 @@ func registerForumHandlers(i dto.Intent, handlers ...interface{}) dto.Intent {
 }
 
 // registerRelationHandlers 注册频道关系链相关handlers
-func registerRelationHandlers(i dto.Intent, handlers ...interface{}) dto.Intent {
+func registerRelationHandlers(hStruct *Handlers, i dto.Intent, handlers ...interface{}) dto.Intent {
 	for _, h := range handlers {
 		switch handle := h.(type) {
 		case GuildEventHandler:
-			DefaultHandlers.Guild = handle
+			hStruct.Guild = handle
 			i = i | dto.EventToIntent(dto.EventGuildCreate, dto.EventGuildDelete, dto.EventGuildUpdate)
 		case GuildMemberEventHandler:
-			DefaultHandlers.GuildMember = handle
+			hStruct.GuildMember = handle
 			i = i | dto.EventToIntent(dto.EventGuildMemberAdd, dto.EventGuildMemberRemove, dto.EventGuildMemberUpdate)
 		case ChannelEventHandler:
-			DefaultHandlers.Channel = handle
+			hStruct.Channel = handle
 			i = i | dto.EventToIntent(dto.EventChannelCreate, dto.EventChannelDelete, dto.EventChannelUpdate)
 		default:
 		}
@@ -236,44 +265,45 @@ func registerRelationHandlers(i dto.Intent, handlers ...interface{}) dto.Intent 
 }
 
 // registerMessageHandlers 注册消息相关的handler
-func registerMessageHandlers(i dto.Intent, handlers ...interface{}) dto.Intent {
+func registerMessageHandlers(hStruct *Handlers, i dto.Intent, handlers ...interface{}) dto.Intent {
 	for _, h := range handlers {
 		switch handle := h.(type) {
 		case MessageEventHandler:
-			DefaultHandlers.Message = handle
+			hStruct.Message = handle
 			i = i | dto.EventToIntent(dto.EventMessageCreate)
 		case ATMessageEventHandler:
-			DefaultHandlers.ATMessage = handle
+			hStruct.ATMessage = handle
 			i = i | dto.EventToIntent(dto.EventAtMessageCreate)
 		case DirectMessageEventHandler:
-			DefaultHandlers.DirectMessage = handle
+			hStruct.DirectMessage = handle
 			i = i | dto.EventToIntent(dto.EventDirectMessageCreate)
 		case MessageDeleteEventHandler:
-			DefaultHandlers.MessageDelete = handle
+			hStruct.MessageDelete = handle
 			i = i | dto.EventToIntent(dto.EventMessageDelete)
 		case PublicMessageDeleteEventHandler:
-			DefaultHandlers.PublicMessageDelete = handle
+			hStruct.PublicMessageDelete = handle
 			i = i | dto.EventToIntent(dto.EventPublicMessageDelete)
 		case DirectMessageDeleteEventHandler:
-			DefaultHandlers.DirectMessageDelete = handle
+			hStruct.DirectMessageDelete = handle
 			i = i | dto.EventToIntent(dto.EventDirectMessageDelete)
 		case MessageReactionEventHandler:
-			DefaultHandlers.MessageReaction = handle
+			hStruct.MessageReaction = handle
 			i = i | dto.EventToIntent(dto.EventMessageReactionAdd, dto.EventMessageReactionRemove)
 		case MessageAuditEventHandler:
-			DefaultHandlers.MessageAudit = handle
+			hStruct.MessageAudit = handle
 			i = i | dto.EventToIntent(dto.EventMessageAuditPass, dto.EventMessageAuditReject)
 		case GroupATMessageEventHandler:
-			DefaultHandlers.GroupATMessage = handle
+			hStruct.GroupATMessage = handle
 			i = i | dto.EventToIntent(dto.EventGroupAtMessageCreate)
 		case GroupMessageEventHandler:
-			DefaultHandlers.GroupMessage = handle
+			hStruct.GroupMessage = handle
 			i = i | dto.EventToIntent(dto.EventGroupMessageCreate)
 		case C2CMessageEventHandler:
-			DefaultHandlers.C2CMessage = handle
+			hStruct.C2CMessage = handle
 			i = i | dto.EventToIntent(dto.EventC2CMessageCreate)
 		default:
 		}
 	}
 	return i
 }
+
