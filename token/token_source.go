@@ -99,7 +99,7 @@ type QQBotTokenSource struct {
 	sg          singleflight.Group
 }
 
-// NewQQBotTokenSource 初始鍖?
+// NewQQBotTokenSource 初始化
 func NewQQBotTokenSource(credentials *QQBotCredentials) oauth2.TokenSource {
 	return &QQBotTokenSource{
 		credentials: credentials,
@@ -188,7 +188,7 @@ func (w *QQBotTokenSource) GetAppID() string {
 	return w.credentials.AppID
 }
 
-// StartRefreshAccessToken 启动获取AccessToken的后台刷鏂?
+// StartRefreshAccessToken 启动获取AccessToken的后台刷新
 func StartRefreshAccessToken(ctx context.Context, tokenSource oauth2.TokenSource) error {
 	tk, err := tokenSource.Token()
 	if err != nil {
@@ -199,13 +199,13 @@ func StartRefreshAccessToken(ctx context.Context, tokenSource oauth2.TokenSource
 		var consecutiveFailures int
 		for {
 			var refreshMilliSec int64
-			//上一轮获可tk 失败
+			//上一轮获取token失败
 			if tk == nil {
 				if consecutiveFailures > 10 {
 					panic("get token failed continuously for more than ten times")
 				}
 				consecutiveFailures++
-				refreshMilliSec = 1000 // 1000ms后重误
+				refreshMilliSec = 1000 // 1000ms后重试
 			} else {
 				consecutiveFailures = 0
 				refreshMilliSec = getRefreshMilliSec(tk.ExpiresIn)
@@ -238,14 +238,14 @@ var (
 	r = rand.New(rand.NewSource(time.Now().Unix()))
 )
 
-// getRefreshSec 为token刷新保留提前閲忋€傞伩鍏嶇敱浜庣綉缁滃欢杩熺瓑鍘熷洜瀵艰嚧鐨則oken刷新不及鏃躲€?
+// getRefreshSec 为token刷新保留提前量，避免因为网络延迟等原因导致token刷新不及时
 func getRefreshMilliSec(tokenTTLSec int64) int64 {
 	refreshMilliSec := tokenTTLSec * 1000
 	if refreshMilliSec < defaultExpiryDeltaMillSec {
 		return refreshMilliSec
 	}
 	refreshMilliSec -= defaultExpiryDeltaMillSec
-	// 随机化，避免鎵€鏈夋満鍣ㄤ汉閮藉悓鏃惰幏鍙朼ccess_token
+	// 随机化，避免所有应用同时获取access_token
 	if refreshMilliSec > randTimeUpperLimitMilliSec {
 		rand := r.Int63n(randTimeUpperLimitMilliSec)
 		log.Debugf("rand:%d", rand)

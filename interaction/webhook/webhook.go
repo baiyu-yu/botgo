@@ -42,8 +42,7 @@ var DefaultGetSecretFunc = func() string {
 	return os.Getenv("QQBotSecret")
 }
 
-// HTTPHandler 用户处理回调时间，该函数实现的是 https://pkg.go.dev/net/http#HandleFunc 鎵€瑕佹眰的handler
-// 会自动进行签名验证，心跳包回复，以及根据使用 event.RegisterHandlers 注册的handler 去执行不同的 handler 来处理事件// 如果寮€鍙戣€呬笉鎯冲湪鎺ユ敹浜嬩欢鐨勫湴鏂瑰鐞嗭紝鍙互瀹炵幇 DefaultHandlers.Plain 然后在内部处理相关的异步生产鎴栬€呰浆鍙戠殑閫昏緫
+// HTTPHandler 用户处理回调时间，该函数实现的是 https://pkg.go.dev/net/http#HandleFunc
 func HTTPHandler(w http.ResponseWriter, r *http.Request, credentials *token.QQBotCredentials) {
 	defer r.Body.Close()
 	body := make([]byte, r.ContentLength)
@@ -66,7 +65,7 @@ func HTTPHandler(w http.ResponseWriter, r *http.Request, credentials *token.QQBo
 		return
 	}
 	log.Info("payload:%+v", payload)
-	// 原始数据放入，parse 的时候需要从里面提取 d
+	// 原始数据放入，parse 的时候需要从里面提取
 	payload.RawMessage = body
 	payload.Session = &dto.Session{AppID: credentials.AppID}
 	var result string
@@ -105,12 +104,13 @@ func HTTPHandler(w http.ResponseWriter, r *http.Request, credentials *token.QQBo
 }
 
 func parsePayload(payload *dto.WSPayload, traceID string) string {
-	// 处理心跳鍖?	if payload.OPCode == dto.WSHeartbeat {
+	// 处理心跳包
+	if payload.OPCode == dto.WSHeartbeat {
 		return GenHeartbeatACK(uint32(payload.Data.(float64)))
 	}
 	// 处理事件
 	if payload.OPCode == dto.WSDispatchEvent {
-		// 解析具体事件，并鎶曢€掔粰涓氬姟娉ㄥ唽的handler
+		// 解析具体事件，并投递给业务注册的handler
 		if err := event.ParseAndHandle(payload); err != nil {
 			log.Errorf(
 				"parseAndHandle failed, %v, traceID:%s, payload: %v", err,
