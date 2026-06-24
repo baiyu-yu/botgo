@@ -4,6 +4,7 @@ package local
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/sealdice/botgo/dto"
@@ -97,6 +98,11 @@ func (l *ChanManager) newConnect(ctx context.Context, session dto.Session) {
 	if err = wsClient.Listening(); err != nil {
 		log.Errorf("[ws/session] Listening err %+v", err)
 		currentSession := wsClient.Session()
+		// 如果是 4014 disallowed intents 错误，降级 intents 避开高级事件，ws没有权限，所以不进行后续请求
+		if strings.Contains(err.Error(), "4014") || strings.Contains(err.Error(), "disallowed intents") {
+			log.Infof("[ws/session] disallowed intents (4014) detected, downgrading intents to standard public bot intents")
+			currentSession.Intent = currentSession.Intent &^ (dto.IntentGroupMembers | dto.IntentEnterAIO)
+		}
 		// 对于不能够进行重连的session，需要清空 session id 与 seq
 		if manager.CanNotResume(err) {
 			currentSession.ID = ""
