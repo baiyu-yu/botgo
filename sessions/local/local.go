@@ -4,14 +4,14 @@ package local
 import (
 	"context"
 	"fmt"
-	wss "github.com/gorilla/websocket"
+	"strings"
 	"time"
 
 	"github.com/sealdice/botgo/dto"
 	"github.com/sealdice/botgo/log"
 	"github.com/sealdice/botgo/sessions/manager"
-	"github.com/sealdice/botgo/token"
 	"github.com/sealdice/botgo/websocket"
+	"golang.org/x/oauth2"
 )
 
 // New 创建本地session管理器
@@ -25,7 +25,7 @@ type ChanManager struct {
 }
 
 // Start 启动本地 session manager
-func (l *ChanManager) Start(ctx context.Context, apInfo *dto.WebsocketAP, token *token.Token, intents *dto.Intent) error {
+func (l *ChanManager) Start(ctx context.Context, apInfo *dto.WebsocketAP, tokenSource oauth2.TokenSource, intents *dto.Intent) error {
 	defer log.Sync()
 	if err := manager.CheckSessionLimit(apInfo); err != nil {
 		log.Errorf("[ws/session/local] session limited apInfo: %+v", apInfo)
@@ -35,18 +35,24 @@ func (l *ChanManager) Start(ctx context.Context, apInfo *dto.WebsocketAP, token 
 	log.Infof("[ws/session/local] will start %d sessions and per session start interval is %s",
 		apInfo.Shards, startInterval)
 
+	var appID string
+	if botTokenSource, ok := tokenSource.(interface{ GetAppID() string }); ok {
+		appID = botTokenSource.GetAppID()
+	}
+
 	// 按照shards数量初始化，用于启动连接的管理
 	l.sessionChan = make(chan dto.Session, apInfo.Shards)
 	for i := uint32(0); i < apInfo.Shards; i++ {
 		session := dto.Session{
-			URL:     apInfo.URL,
-			Token:   *token,
-			Intent:  *intents,
-			LastSeq: 0,
+			URL:         apInfo.URL,
+			TokenSource: tokenSource,
+			Intent:      *intents,
+			LastSeq:     0,
 			Shards: dto.ShardConfig{
 				ShardID:    i,
 				ShardCount: apInfo.Shards,
 			},
+			AppID: appID,
 		}
 		l.sessionChan <- session
 	}
@@ -95,13 +101,14 @@ func (l *ChanManager) newConnect(ctx context.Context, session dto.Session) {
 		log.Errorf("[ws/session] Identify/Resume err %+v", err)
 		return
 	}
-	if err := wsClient.Listening(); err != nil {
-		if !wss.IsUnexpectedCloseError(err, 4009, 9000) {
-			log.Debugf("[ws/session] Listening err %+v", err)
-		} else {
-			log.Errorf("[ws/session] Listening err %+v", err)
-		}
+	if err = wsClient.Listening(); err != nil {
+		log.Errorf("[ws/session] Listening err %+v", err)
 		currentSession := wsClient.Session()
+		// 如果是 4014 disallowed intents 错误，降级 intents 避开高级事件，ws没有权限，所以不进行后续请求
+		if strings.Contains(err.Error(), "4014") || strings.Contains(err.Error(), "disallowed intents") {
+			log.Infof("[ws/session] disallowed intents (4014) detected, downgrading intents to standard public bot intents")
+			currentSession.Intent = currentSession.Intent &^ (dto.IntentGroupMembers | dto.IntentEnterAIO)
+		}
 		// 对于不能够进行重连的session，需要清空 session id 与 seq
 		if manager.CanNotResume(err) {
 			currentSession.ID = ""

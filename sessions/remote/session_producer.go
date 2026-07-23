@@ -7,21 +7,22 @@ import (
 
 	"github.com/sealdice/botgo/dto"
 	"github.com/sealdice/botgo/log"
-	"github.com/sealdice/botgo/token"
+	"golang.org/x/oauth2"
 )
 
 // distributeSession 根据 shards 生产初始化的 session，这里需要抢一个分布式锁，抢到锁的服务器，负责把session都生产到 redis 中
-func (r *RedisManager) distributeSession(apInfo *dto.WebsocketAP, token *token.Token, intents *dto.Intent) error {
+func (r *RedisManager) distributeSession(
+	apInfo *dto.WebsocketAP, tokenSource oauth2.TokenSource, intents *dto.Intent) error {
 	// clear，报错也不影响
 	if err := r.client.Del(context.Background(), r.sessionQueueKey); err != nil {
 		log.Errorf("[ws/session/redis] clear session list failed: %v", err)
 	}
 	for i := uint32(0); i < apInfo.Shards; i++ {
 		session := dto.Session{
-			URL:     apInfo.URL,
-			Token:   *token,
-			Intent:  *intents,
-			LastSeq: 0,
+			URL:         apInfo.URL,
+			TokenSource: tokenSource,
+			Intent:      *intents,
+			LastSeq:     0,
 			Shards: dto.ShardConfig{
 				ShardID:    i,
 				ShardCount: apInfo.Shards,
@@ -39,7 +40,7 @@ func (r *RedisManager) sessionProducer(startInterval time.Duration) {
 		time.Sleep(startInterval) // 每次生产需要等待一个间隔，控制消费者连接并发
 		if err := r.produce(session); err != nil {
 			log.Errorf("[ws/session/redis] produce session failed: %v", err)
-			r.sessionProduceChan <- session // 放回去重试
+			r.sessionProduceChan <- session // 放回重试
 		}
 	}
 }

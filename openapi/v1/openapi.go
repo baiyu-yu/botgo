@@ -9,20 +9,22 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-resty/resty/v2" // resty 是一个优秀的 rest api 客户端，可以极大的减少开发基于 rest 标准接口求请求的封装工作量
+	"github.com/go-resty/resty/v2" // resty 是一个优秀的 rest api 客户端，可以极大的减少开发基于 rest 标准接口求请求 of 封装工作量
+	"github.com/sealdice/botgo/constant"
 	"github.com/sealdice/botgo/errs"
 	"github.com/sealdice/botgo/log"
 	"github.com/sealdice/botgo/openapi"
-	"github.com/sealdice/botgo/token"
 	"github.com/sealdice/botgo/version"
+	"golang.org/x/oauth2"
 )
 
 // MaxIdleConns 默认指定空闲连接池大小
 const MaxIdleConns = 3000
 
 type openAPI struct {
-	token   *token.Token
-	timeout time.Duration
+	appID       string
+	tokenSource oauth2.TokenSource
+	timeout     time.Duration
 
 	sandbox     bool   // 请求沙箱环境
 	debug       bool   // debug 模式，调试sdk时候使用
@@ -47,19 +49,26 @@ func (o *openAPI) TraceID() string {
 }
 
 // Setup 生成一个实例
-func (o *openAPI) Setup(token *token.Token, inSandbox bool) openapi.OpenAPI {
+func (o *openAPI) Setup(botAppID string, tokenSource oauth2.TokenSource, inSandbox bool) openapi.OpenAPI {
 	api := &openAPI{
-		token:   token,
-		timeout: 3 * time.Second,
-		sandbox: inSandbox,
+		appID:       botAppID,
+		tokenSource: tokenSource,
+		timeout:     5 * time.Second,
+		sandbox:     inSandbox,
 	}
-	api.setupClient() // 初始化可复用的 client
+	api.setupClient(botAppID) // 初始化可复用的 client
 	return api
 }
 
 // WithTimeout 设置请求接口超时时间
 func (o *openAPI) WithTimeout(duration time.Duration) openapi.OpenAPI {
 	o.restyClient.SetTimeout(duration)
+	return o
+}
+
+// SetDebug 设置调试模式, 输出更多过程日志
+func (o *openAPI) SetDebug(debug bool) openapi.OpenAPI {
+	o.restyClient.Debug = debug
 	return o
 }
 
@@ -70,34 +79,53 @@ func (o *openAPI) Transport(ctx context.Context, method, url string, body interf
 }
 
 // 初始化 client
-func (o *openAPI) setupClient() {
+func (o *openAPI) setupClient(appID string) {
 	o.restyClient = resty.New().
 		SetTransport(createTransport(nil, MaxIdleConns)). // 自定义 transport
 		SetLogger(log.DefaultLogger).
 		SetDebug(o.debug).
 		SetTimeout(o.timeout).
-		SetAuthToken(o.token.GetString()).
-		SetAuthScheme(string(o.token.Type)).
 		SetHeader("User-Agent", version.String()).
+		SetHeader("X-Union-Appid", appID).
 		SetPreRequestHook(
-			func(client *resty.Client, request *http.Request) error {
+			func(_ *resty.Client, request *http.Request) error {
 				// 执行请求前过滤器
-				// 由于在 `OnBeforeRequest` 的时候，request 还没生成，所以 filter 不能使用，所以放到 `PreRequestHook`
+				// 由于在 OnBeforeRequest 的时候，request 还没生成，所以 filter 不能使用，所以放到 PreRequestHook
 				return openapi.DoReqFilterChains(request, nil)
+			},
+		).
+		OnBeforeRequest(
+			func(c *resty.Client, r *resty.Request) error {
+				tk, err := o.tokenSource.Token()
+				if err != nil {
+					log.Errorf("[setupClient] retrieve token failed:%s", err)
+					return err
+				}
+				r.SetAuthScheme(tk.TokenType)
+				r.SetAuthToken(tk.AccessToken)
+				c.SetAuthScheme(tk.TokenType)
+				c.SetAuthToken(tk.AccessToken)
+
+				if r.Header == nil {
+					r.Header = make(http.Header)
+				}
+				r.Header.Set("X-Union-Appid", o.appID)
+				return nil
 			},
 		).
 		// 设置请求之后的钩子，打印日志，判断状态码
 		OnAfterResponse(
-			func(client *resty.Client, resp *resty.Response) error {
+			func(_ *resty.Client, resp *resty.Response) error {
 				log.Infof("%v", respInfo(resp))
 				// 执行请求后过滤器
 				if err := openapi.DoRespFilterChains(resp.Request.RawRequest, resp.RawResponse); err != nil {
 					return err
 				}
-				traceID := resp.Header().Get(openapi.TraceIDKey)
+				traceID := resp.Header().Get(constant.HeaderTraceID)
 				o.lastTraceID = traceID
 				// 非成功含义的状态码，需要返回 error 供调用方识别
 				if !openapi.IsSuccessStatus(resp.StatusCode()) {
+					o.handleError(resp)
 					return errs.New(resp.StatusCode(), string(resp.Body()), traceID)
 				}
 				return nil
@@ -110,6 +138,36 @@ func (o *openAPI) request(ctx context.Context) *resty.Request {
 	return o.restyClient.R().SetContext(ctx)
 }
 
+// GetAppID 获取appid
+func (o *openAPI) GetAppID() string {
+	if o == nil {
+		return ""
+	}
+	return o.appID
+}
+
+// errBody 请求出错情况下的body结构
+type errBody struct {
+	Message string `json:"message"`  // 错误原因
+	Code    int    `json:"code"`     // 错误码，后续废弃
+	ErrCode int    `json:"err_code"` // 错误码
+	TraceID string `json:"trace_id"` // 服务端traceID, 用于问题排查
+}
+
+// handleError 处理openapi调用失败的情况
+func (o *openAPI) handleError(resp *resty.Response) {
+	var b errBody
+	err := json.Unmarshal(resp.Body(), &b)
+	if err != nil {
+		log.Errorf("parse errBody fail, err:%v, body:%s", err, string(resp.Body()))
+		return
+	}
+	if b.ErrCode == errs.APICodeTokenExpireOrNotExist || b.Code == errs.APICodeTokenExpireOrNotExist {
+		log.Errorf("token expire or not exist, update token")
+		_, _ = o.tokenSource.Token()
+	}
+}
+
 // respInfo 用于输出日志的时候格式化数据
 func respInfo(resp *resty.Response) string {
 	bodyJSON, _ := json.Marshal(resp.Request.Body)
@@ -117,14 +175,13 @@ func respInfo(resp *resty.Response) string {
 		"[OPENAPI]%v %v, traceID:%v, status:%v, elapsed:%v req: %v, resp: %v",
 		resp.Request.Method,
 		resp.Request.URL,
-		resp.Header().Get(openapi.TraceIDKey),
+		resp.Header().Get(constant.HeaderTraceID),
 		resp.Status(),
 		resp.Time(),
 		string(bodyJSON),
 		string(resp.Body()),
 	)
 }
-
 func createTransport(localAddr net.Addr, idleConns int) *http.Transport {
 	dialer := &net.Dialer{
 		Timeout:   60 * time.Second,

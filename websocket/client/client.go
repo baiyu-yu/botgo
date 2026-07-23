@@ -102,12 +102,16 @@ func (c *Client) Listening() error {
 			}
 
 			// 不能够 identify 的错误
-			if wss.IsCloseError(err, 4914, 4915) {
+			if wss.IsCloseError(err, errs.WSCodeBackendBotOffline, errs.WSCodeBackendBotBanned) {
 				err = errs.New(errs.CodeConnCloseCantIdentify, err.Error())
+			}
+			// accessToken过期
+			if wss.IsCloseError(err, errs.WSCodeBackendAuthenticationFail) {
+				_, _ = c.session.TokenSource.Token()
 			}
 			// 这里用 UnexpectedCloseError，如果有需要排除在外的 close error code，可以补充在第二个参数上
 			// 4009: session time out, 发了 reconnect 之后马上关闭连接时候的错误码，这个是允许 resumeSignal 的
-			if wss.IsUnexpectedCloseError(err, 4009) {
+			if wss.IsUnexpectedCloseError(err, errs.WSCodeBackendSessionTimeOut) {
 				err = errs.New(errs.CodeConnCloseCantResume, err.Error())
 			}
 			if event.DefaultHandlers.ErrorNotify != nil {
@@ -144,9 +148,14 @@ func (c *Client) Write(message *dto.WSPayload) error {
 
 // Resume 重连
 func (c *Client) Resume() error {
+	token, err := c.session.TokenSource.Token()
+	if err != nil {
+		log.Errorf("[resume] get access token failed:%s", err)
+		return err
+	}
 	payload := &dto.WSPayload{
 		Data: &dto.WSResumeData{
-			Token:     c.session.Token.GetString(),
+			Token:     token.AccessToken,
 			SessionID: c.session.ID,
 			Seq:       c.session.LastSeq,
 		},
@@ -161,9 +170,14 @@ func (c *Client) Identify() error {
 	if c.session.Intent == 0 {
 		c.session.Intent = dto.IntentGuilds
 	}
+	tk, err := c.session.TokenSource.Token()
+	if err != nil {
+		log.Errorf("[resume] get access token failed:%s", err)
+		return err
+	}
 	payload := &dto.WSPayload{
 		Data: &dto.WSIdentityData{
-			Token:   c.session.Token.GetString(),
+			Token:   fmt.Sprintf("%s %s", tk.TokenType, tk.AccessToken),
 			Intents: c.session.Intent,
 			Shard: []uint32{
 				c.session.Shards.ShardID,
@@ -198,6 +212,10 @@ func (c *Client) readMessageToQueue() {
 				log.Errorf("%s read message failed, %v, message %s", c.session, err, string(message))
 			}
 			close(c.messageQueue)
+			// accessToken过期
+			if wss.IsCloseError(err, errs.WSCodeBackendAuthenticationFail) {
+				_, _ = c.session.TokenSource.Token()
+			}
 			c.closeChan <- err
 			return
 		}
@@ -207,6 +225,7 @@ func (c *Client) readMessageToQueue() {
 			continue
 		}
 		payload.RawMessage = message
+		payload.Session = c.session
 		log.Infof("%s receive %s message, %s", c.session, dto.OPMeans(payload.OPCode), string(message))
 		// 处理内置的一些事件，如果处理成功，则这个事件不再投递给业务
 		if c.isHandleBuildIn(payload) {

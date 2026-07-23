@@ -38,9 +38,17 @@ const (
 	EventForumReplyDelete      EventType = "FORUM_REPLY_DELETE"
 	EventForumAuditResult      EventType = "FORUM_PUBLISH_AUDIT_RESULT"
 	EventInteractionCreate     EventType = "INTERACTION_CREATE"
-
-	EventC2CMessageCreate     EventType = "C2C_MESSAGE_CREATE"
-	EventGroupAtMessageCreate EventType = "GROUP_AT_MESSAGE_CREATE"
+	EventGroupAtMessageCreate  EventType = "GROUP_AT_MESSAGE_CREATE"
+	EventGroupMessageCreate    EventType = "GROUP_MESSAGE_CREATE"
+	EventC2CMessageCreate      EventType = "C2C_MESSAGE_CREATE"
+	EventSubscribeMsgStatus    EventType = "SUBSCRIBE_MESSAGE_STATUS"
+	EventC2CFriendAdd          EventType = "FRIEND_ADD"
+	EventC2CFriendDel          EventType = "FRIEND_DEL"
+	EventGroupAddRobot         EventType = "GROUP_ADD_ROBOT"
+	EventGroupDelRobot         EventType = "GROUP_DEL_ROBOT"
+	EventGroupMemberAdd        EventType = "GROUP_MEMBER_ADD"
+	EventGroupMemberRemove     EventType = "GROUP_MEMBER_REMOVE"
+	EventEnterAIO              EventType = "ENTER_AIO"
 )
 
 // intentEventMap 不同 intent 对应的事件定义
@@ -49,8 +57,12 @@ var intentEventMap = map[Intent][]EventType{
 		EventGuildCreate, EventGuildUpdate, EventGuildDelete,
 		EventChannelCreate, EventChannelUpdate, EventChannelDelete,
 	},
-	IntentGuildMembers:          {EventGuildMemberAdd, EventGuildMemberUpdate, EventGuildMemberRemove},
-	IntentGuildMessages:         {EventMessageCreate, EventMessageDelete},
+	IntentGuildMembers:  {EventGuildMemberAdd, EventGuildMemberUpdate, EventGuildMemberRemove},
+	IntentGuildMessages: {EventMessageCreate, EventMessageDelete},
+	IntentGroupMessages: {EventGroupAtMessageCreate, EventGroupMessageCreate, EventC2CMessageCreate, EventSubscribeMsgStatus,
+		EventC2CFriendAdd, EventC2CFriendDel, EventGroupAddRobot, EventGroupDelRobot},
+	IntentGroupMembers: {EventGroupMemberAdd, EventGroupMemberRemove},
+
 	IntentGuildMessageReactions: {EventMessageReactionAdd, EventMessageReactionRemove},
 	IntentGuildAtMessage:        {EventAtMessageCreate, EventPublicMessageDelete},
 	IntentDirectMessages:        {EventDirectMessageCreate, EventDirectMessageDelete},
@@ -60,8 +72,8 @@ var intentEventMap = map[Intent][]EventType{
 		EventForumThreadCreate, EventForumThreadUpdate, EventForumThreadDelete, EventForumPostCreate,
 		EventForumPostDelete, EventForumReplyCreate, EventForumReplyDelete, EventForumAuditResult,
 	},
-	IntentInteraction:         {EventInteractionCreate},
-	IntentC2CAndGroupMessages: {EventC2CMessageCreate, EventGroupAtMessageCreate},
+	IntentInteraction: {EventInteractionCreate},
+	IntentEnterAIO:    {EventEnterAIO},
 }
 
 var eventIntentMap = transposeIntentEventMap(intentEventMap)
