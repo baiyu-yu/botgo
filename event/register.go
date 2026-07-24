@@ -306,4 +306,3 @@ func registerMessageHandlers(hStruct *Handlers, i dto.Intent, handlers ...interf
 	}
 	return i
 }
-
